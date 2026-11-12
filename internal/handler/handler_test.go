@@ -50,7 +50,7 @@ func newTestSvc(t *testing.T) (*service.Services, *tokstore.MemoryStore) {
 		t.Fatal(err)
 	}
 	mkUser := func(id, name, role string) {
-		if err := r.Users.Insert(ctx, types.User{ID: id, Username: name, PasswordHash: sign.HashPassword("123456"), Role: role}); err != nil {
+		if err := r.Users.Insert(ctx, types.User{ID: id, Username: name, PasswordHash: sign.HashPassword("ut-passw0rd"), Role: role}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -99,7 +99,7 @@ func parseResp(t *testing.T, w *httptest.ResponseRecorder) resp {
 func loginToken(t *testing.T, h *H, username string) string {
 	t.Helper()
 	w := httptest.NewRecorder()
-	h.login(w, doJSON(t, http.MethodPost, "/api/login", `{"username":"`+username+`","password":"123456"}`))
+	h.login(w, doJSON(t, http.MethodPost, "/api/login", `{"username":"`+username+`","password":"ut-passw0rd"}`))
 	out := parseResp(t, w)
 	if out.Code != 0 {
 		t.Fatalf("登录失败: %s", w.Body.String())

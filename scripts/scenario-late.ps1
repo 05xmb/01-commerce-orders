@@ -8,8 +8,19 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# 口令经环境变量注入（本地 .env / 部署运行环境），仓库不存明文口令
+if (-not $env:SEED_PASSWORD) {
+  $envPath = Join-Path (Split-Path -Parent $PSScriptRoot) '.env'
+  if (Test-Path $envPath) {
+    Get-Content -Encoding UTF8 $envPath | ForEach-Object {
+      if ($_ -match '^\s*([^#=]+)=(.*)$') { Set-Item -Path ('env:' + $matches[1].Trim()) -Value $matches[2].Trim() }
+    }
+  }
+}
+if (-not $env:SEED_PASSWORD) { throw '缺少 SEED_PASSWORD：请在本地 .env 或运行环境注入（仓库不存明文口令）' }
+
 function Login($user) {
-  $json = @{ username = $user; password = "123456" } | ConvertTo-Json -Compress
+  $json = @{ username = $user; password = $env:SEED_PASSWORD } | ConvertTo-Json -Compress
   $r = Invoke-RestMethod -Method Post "$Base/api/login" -ContentType 'application/json; charset=utf-8' `
     -Body ([Text.Encoding]::UTF8.GetBytes($json))
   return @{ Authorization = "Bearer $($r.data.token)" }

@@ -8,6 +8,7 @@ services:
       REDIS_ADDR: ${REDIS_ADDR}
       REDIS_PASS: ${REDIS_PASS}
       CHANNEL_SECRET: ${CHANNEL_SECRET}
+      SEED_PASSWORD: ${SEED_PASSWORD}
       CHANNEL_BASE_URL: http://pay-channel:8901
     restart: always
 

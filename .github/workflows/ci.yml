@@ -133,8 +133,9 @@ jobs:
           echo "健康检查通过"
           TOKEN=$(curl -fsSL -X POST "$APP_BASE_URL/api/login" \
             -H "Content-Type: application/json" \
-            -d '{"username":"op01","password":"123456"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])')
+            -d "{\"username\":\"op01\",\"password\":\"$SEED_PASSWORD\"}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["token"])')
           curl -fsSL "$APP_BASE_URL/api/ops/summary" -H "Authorization: Bearer $TOKEN" | grep -q '"code":0'
           echo "冒烟通过：登录 + 运营汇总正常"
         env:
           APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          SEED_PASSWORD: ${{ secrets.SEED_PASSWORD }}

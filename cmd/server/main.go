@@ -7,6 +7,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -44,7 +45,11 @@ func main() {
 	}
 	store := mysql.NewStore(db)
 
-	if err := seed(context.Background(), store); err != nil {
+	seedPass := os.Getenv("SEED_PASSWORD")
+	if seedPass == "" {
+		log.Fatal("SEED_PASSWORD 未配置：预置账号口令经环境变量注入（本地 .env / 部署运行环境），仓库不存明文口令")
+	}
+	if err := seed(context.Background(), store, seedPass); err != nil {
 		log.Fatalf("种子数据失败: %v", err)
 	}
 
@@ -80,8 +85,8 @@ func main() {
 	server.Start()
 }
 
-// seed 预置账号与商品（幂等：已有数据则跳过）
-func seed(ctx context.Context, store repo.Store) error {
+// seed 预置账号与商品（幂等：已有数据则跳过）；口令经环境变量注入，仅落散列
+func seed(ctx context.Context, store repo.Store, seedPass string) error {
 	r := store.Repos()
 	n, err := r.Users.Count(ctx)
 	if err != nil {
@@ -97,7 +102,7 @@ func seed(ctx context.Context, store repo.Store) error {
 			{ID: "u-cs01", Username: "cs01", Name: "客服", Role: types.RoleCS},
 		}
 		for _, u := range users {
-			u.PasswordHash = sign.HashPassword("123456") // 教学预置口令
+			u.PasswordHash = sign.HashPassword(seedPass) // 口令仅落散列，明文不入库
 			if err := r.Users.Insert(ctx, u); err != nil {
 				return err
 			}

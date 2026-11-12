@@ -13,7 +13,7 @@ import (
 // 空库种子：6 账号 + 2 商品
 func TestSeed_Empty(t *testing.T) {
 	store := fake.NewStore()
-	if err := seed(context.Background(), store); err != nil {
+	if err := seed(context.Background(), store, "ut-seed-pass"); err != nil {
 		t.Fatal(err)
 	}
 	r := store.Repos()
@@ -44,10 +44,10 @@ func TestSeed_Empty(t *testing.T) {
 func TestSeed_Idempotent(t *testing.T) {
 	store := fake.NewStore()
 	ctx := context.Background()
-	if err := seed(ctx, store); err != nil {
+	if err := seed(ctx, store, "ut-seed-pass"); err != nil {
 		t.Fatal(err)
 	}
-	if err := seed(ctx, store); err != nil {
+	if err := seed(ctx, store, "ut-seed-pass"); err != nil {
 		t.Fatalf("重复种子应幂等，实际 %v", err)
 	}
 	n, _ := store.Repos().Users.Count(ctx)
@@ -62,7 +62,7 @@ func TestSeed_ExistingUsers(t *testing.T) {
 	ctx := context.Background()
 	r := store.Repos()
 	_ = r.Users.Insert(ctx, types.User{ID: "u-x", Username: "someone", PasswordHash: "x", Role: types.RoleBuyer})
-	if err := seed(ctx, store); err != nil {
+	if err := seed(ctx, store, "ut-seed-pass"); err != nil {
 		t.Fatal(err)
 	}
 	n, _ := r.Users.Count(ctx)
@@ -92,7 +92,7 @@ func (failUsers) Count(context.Context) (int, error) { return 0, errors.New("db 
 // 底层错误应向上传递
 func TestSeed_Error(t *testing.T) {
 	store := &failStore{Store: fake.NewStore()}
-	if err := seed(context.Background(), store); err == nil {
+	if err := seed(context.Background(), store, "ut-seed-pass"); err == nil {
 		t.Fatal("Count 失败应传递错误")
 	}
 }

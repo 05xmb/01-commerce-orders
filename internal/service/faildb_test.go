@@ -261,11 +261,11 @@ func TestDBErrorBranches(t *testing.T) {
 	t.Run("Auth", func(t *testing.T) {
 		f, plan := newFailFixture(t)
 		r := f.svc.d.Store.Repos()
-		if err := r.Users.Insert(f.ctx, types.User{ID: "u1", Username: "cs01", PasswordHash: sign.HashPassword("123456"), Role: types.RoleCS}); err != nil {
+		if err := r.Users.Insert(f.ctx, types.User{ID: "u1", Username: "cs01", PasswordHash: sign.HashPassword("ut-passw0rd"), Role: types.RoleCS}); err != nil {
 			t.Fatal(err)
 		}
 		plan.set("Users.GetByUsername", dbErr)
-		if _, err := f.svc.Auth.Login(f.ctx, "cs01", "123456"); !errors.Is(err, types.ErrUnauthorized) {
+		if _, err := f.svc.Auth.Login(f.ctx, "cs01", "ut-passw0rd"); !errors.Is(err, types.ErrUnauthorized) {
 			t.Fatalf("登录查询失败应转未授权，实际 %v", err)
 		}
 	})

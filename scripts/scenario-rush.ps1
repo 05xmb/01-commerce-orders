@@ -7,8 +7,23 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# 口令经环境变量注入（本地 .env / 部署运行环境），仓库不存明文口令
+if (-not $env:SEED_PASSWORD) {
+  $envPath = Join-Path (Split-Path -Parent $PSScriptRoot) '.env'
+  if (Test-Path $envPath) {
+    Get-Content -Encoding UTF8 $envPath | ForEach-Object {
+      if ($_ -match '^\s*([^#=]+)=(.*)$') { Set-Item -Path ('env:' + $matches[1].Trim()) -Value $matches[2].Trim() }
+    }
+  }
+}
+if (-not $env:SEED_PASSWORD) { throw '缺少 SEED_PASSWORD：请在本地 .env 或运行环境注入（仓库不存明文口令）' }
+# 数据库口令从 MYSQL_DSN 解析（仅本地联调重置库存用），不落仓库
+$dbPass = ''
+if ($env:MYSQL_DSN -match ':([^@]+)@') { $dbPass = $matches[1] }
+if (-not $dbPass) { throw '缺少 MYSQL_DSN：无法解析数据库口令用于库存重置' }
+
 function Login($user) {
-  $json = @{ username = $user; password = "123456" } | ConvertTo-Json -Compress
+  $json = @{ username = $user; password = $env:SEED_PASSWORD } | ConvertTo-Json -Compress
   $r = Invoke-RestMethod -Method Post "$Base/api/login" -ContentType 'application/json; charset=utf-8' `
     -Body ([Text.Encoding]::UTF8.GetBytes($json))
   return @{ Authorization = "Bearer $($r.data.token)" }
@@ -22,7 +37,7 @@ Write-Host "== 重置 P1 库存为 5（清空其历史订单的占用干扰） =
 [System.IO.File]::WriteAllText("C:\Temp\rush_reset.sql", "USE ``电商订单表1``; UPDATE product SET stock=5 WHERE id='P1';")
 # 原生命令的 stderr 密码警告不应中断脚本，临时降级错误处理
 $ErrorActionPreference = "Continue"
-& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -h 127.0.0.1 -u root -p123456 --default-character-set=utf8mb4 `
+& "C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe" -h 127.0.0.1 -u root "-p$dbPass" --default-character-set=utf8mb4 `
   -e "source C:/Temp/rush_reset.sql" 2>$null | Out-Null
 $ErrorActionPreference = "Stop"
 $p = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
@@ -33,8 +48,8 @@ Write-Host "== 20 并发抢购库存 5 ==" -ForegroundColor Cyan
 $jobs = 1..$Parallel | ForEach-Object {
   $i = $_
   Start-Job -ScriptBlock {
-    param($base, $buyer)
-    $json = @{ username = $buyer; password = "123456" } | ConvertTo-Json -Compress
+    param($base, $buyer, $pwd)
+    $json = @{ username = $buyer; password = $pwd } | ConvertTo-Json -Compress
     $r = Invoke-RestMethod -Method Post "$base/api/login" -ContentType 'application/json; charset=utf-8' `
       -Body ([Text.Encoding]::UTF8.GetBytes($json))
     $h = @{ Authorization = "Bearer $($r.data.token)" }
@@ -46,7 +61,7 @@ $jobs = 1..$Parallel | ForEach-Object {
     } catch {
       return "FAIL:$($_.ErrorDetails.Message)"
     }
-  } -ArgumentList $Base, ("buyer0" + (($i % 3) + 1))
+  } -ArgumentList $Base, ("buyer0" + (($i % 3) + 1)), $env:SEED_PASSWORD
 }
 $results = $jobs | Wait-Job | Receive-Job
 $jobs | Remove-Job

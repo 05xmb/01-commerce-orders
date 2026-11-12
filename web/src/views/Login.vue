@@ -2,7 +2,7 @@
   <div class="login-page">
     <el-card class="login-card">
       <h2>电商交易系统</h2>
-      <p class="tip">题目01：订单交易、发货与售前退款（演示账号密码均为 123456）</p>
+      <p class="tip">题目01：订单交易、发货与售前退款（演示账号见快捷选择，口令由部署环境/本地配置注入）</p>
       <el-form @submit.prevent="submit">
         <el-form-item>
           <el-input v-model="username" placeholder="用户名" autofocus />
@@ -28,13 +28,12 @@ import { api, setSession, getSession } from '../api'
 const emit = defineEmits(['logged'])
 const presets = ['buyer01', 'buyer02', 'buyer03', 'op01', 'wh01', 'cs01']
 const username = ref('')
-const password = ref('123456')
+const password = ref('')
 const loading = ref(false)
 const error = ref('')
 
 function pick(u) {
   username.value = u
-  password.value = '123456'
 }
 async function submit() {
   if (!username.value || !password.value) {

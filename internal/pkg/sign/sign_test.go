@@ -28,10 +28,10 @@ func TestRefundSignParts(t *testing.T) {
 }
 
 func TestHashPassword(t *testing.T) {
-	if HashPassword("123456") != HashPassword("123456") {
+	if HashPassword("ut-passw0rd") != HashPassword("ut-passw0rd") {
 		t.Fatal("同一口令散列应一致")
 	}
-	if HashPassword("123456") == HashPassword("654321") {
+	if HashPassword("ut-passw0rd") == HashPassword("654321") {
 		t.Fatal("不同口令散列应不同")
 	}
 }

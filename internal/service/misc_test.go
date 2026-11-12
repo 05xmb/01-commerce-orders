@@ -86,18 +86,18 @@ func TestOps_SummaryAndDetail(t *testing.T) {
 func TestAuth(t *testing.T) {
 	f := newFixture(t)
 	r := f.svc.d.Store.Repos()
-	_ = r.Users.Insert(f.ctx, types.User{ID: "u-cs2", Username: "cs02", PasswordHash: hashPassword("123456"), Role: types.RoleCS})
+	_ = r.Users.Insert(f.ctx, types.User{ID: "u-cs2", Username: "cs02", PasswordHash: hashPassword("ut-passw0rd"), Role: types.RoleCS})
 
 	// 密码错误
 	if _, err := f.svc.Auth.Login(f.ctx, "cs02", "wrong"); !errors.Is(err, types.ErrUnauthorized) {
 		t.Fatal("密码错误应拒绝")
 	}
 	// 用户不存在
-	if _, err := f.svc.Auth.Login(f.ctx, "nobody", "123456"); !errors.Is(err, types.ErrUnauthorized) {
+	if _, err := f.svc.Auth.Login(f.ctx, "nobody", "ut-passw0rd"); !errors.Is(err, types.ErrUnauthorized) {
 		t.Fatal("未知用户应拒绝")
 	}
 	// 登录成功并校验 token
-	res, err := f.svc.Auth.Login(f.ctx, "cs02", "123456")
+	res, err := f.svc.Auth.Login(f.ctx, "cs02", "ut-passw0rd")
 	if err != nil {
 		t.Fatal(err)
 	}
