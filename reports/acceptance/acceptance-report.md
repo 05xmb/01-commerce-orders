@@ -46,7 +46,7 @@
 | C4 | 模拟支付渠道覆盖四类通知+异常注入 | 通过 | `cmd/channel/main.go`（7 类场景注入）；单测 `internal/channelclient/client_test.go`（5 例）+ `TestRefundNotify_BadSign`；实测 success/duplicate/amount_mismatch/unknown_order/bad_sign/late/fail 由 S3/S4/B5 覆盖 | 签名校验失败留痕 verify_ok=false 可查 |
 | C5 | Git 流程与提交规范 | 通过 | `main` 仅 Initial commit（无直推）；`dev/01` 独立 13 提交；提交格式 `[类型] [版本号] 中文描述` 实测合规；`git ls-files` 仅含 `.env.example` 无凭据入库；`.gitignore:2` 忽略 `.env` | meegle 编号留空系学生决策豁免（AGENTS.md v0.5 第 5 节注，有留痕），非 AI 擅自放宽 |
 | C6 | 流水线部署、健康检查、业务冒烟 | 证据缺失（流程挂起） | 部署属任务 7（T18–T20），验收时点尚未执行 | 部署后须对 main 合并版本重跑门禁+冒烟，并回填 AGENTS.md"应用最终对外访问地址"决策点 |
-| C7 | 代码版本=测试版本=部署版本，命名一致 | 部分通过 | 测试与验收同锚定 `dev/01@6f3d545`；页面命名与测试报告一致 | 断链：`docs/test-report.md` 引用的 `docs/service-accounts.md` 不存在（整改 P2）；部署版本待 C6 补验后闭环 |
+| C7 | 代码版本=测试版本=部署版本，命名一致 | 部分通过 | 测试与验收同锚定 `dev/01`；页面命名与测试报告一致 | 文档断链已闭环（P2：补建 `docs/service-accounts.md`）；部署版本待 C6 补验后闭环 |
 
 ## D 项：越权与安全抽查
 
@@ -61,9 +61,9 @@
 
 | 编号 | 级别 | 问题 | 整改要求 | 状态 |
 | --- | --- | --- | --- | --- |
-| P1 | M（交付红线口径） | 预置账号口令 `123456` 以明文字面量入库：`cmd/server/main.go:100`、`docs/requirements.md`、`scripts/*.ps1`、`prototype/index.html`、`web/src/views/Login.vue` 等。DB 内已哈希存储（`sign.HashPassword`），但仓库内明文与共同要求第 10 节"仅存部署环境与本地配置"不符 | 种子口令改由环境变量/本地配置注入，仓库内文档/脚本/前端改占位符或读 env；修复后复测并更新本报告 | 待学生裁决 |
-| P2 | L（文档） | `docs/test-report.md` 引用的 `docs/service-accounts.md` 不存在，证据链断链 | 补建该文档或修正测试报告引用 | 待整改 |
-| P3 | 流程 | C6 部署未执行，AGENTS.md"应用最终对外访问地址"未回填 | 任务 7 合并部署后：对 main 合并版本重跑门禁+冒烟，回填地址，更新本报告 C6/C7 为通过 | 挂起 |
+| P1 | M（交付红线口径） | 预置账号口令以明文字面量入库：`cmd/server/main.go` 种子、`web/src/views/Login.vue`、`scripts/*.ps1`（含 MySQL root 口令）、`.github/workflows/ci.yml` 冒烟登录。DB 内已哈希存储（`sign.HashPassword`），但仓库内明文与共同要求第 10 节"仅存部署环境与本地配置"不符 | 种子口令改由环境变量/本地配置注入，仓库内文档/脚本/前端改占位符或读 env；修复后复测并更新本报告 | **已整改**（整改提交见 dev/01）：种子读 `SEED_PASSWORD` 环境变量（缺失启动失败）、脚本读 env/.env、前端无默认口令、CI 走 `secrets.SEED_PASSWORD`、compose 透传、`.env.example` 占位、测试夹具换假口令。复验：`git grep` 跟踪文件仅剩运单号样例 `SF123456789`（非凭据），全测试通过，本地 `.env`（gitignore）注入后双服务启动正常 |
+| P2 | L（文档） | 初版报告误述"`docs/test-report.md` 引用的 `docs/service-accounts.md` 不存在"——复核结论：全仓 `.md` 文件无任何相对链接，该引用并不存在（报告自身误述，据实更正） | 补建账号权限说明文档；校验全仓文档相对路径大小写 | **已闭环**：补建 `docs/service-accounts.md`（账号权限矩阵 + 权限边界 + 口令管理口径，零明文）；链接校验结论：全仓 md 互引均为文字性提及，无失效链接、无大小写不一致 |
+| P3 | 流程 | C6 部署未执行，AGENTS.md"应用最终对外访问地址"未回填 | 学生裁决流程：部署合并完成后，针对 main 合并版本执行本报告 A/B 验收用例核验；核验通过后回填 AGENTS.md 线上应用访问地址，更新本报告 C6/C7 为通过 | 挂起（流程已固化，待任务 7 执行） |
 | P4 | 遗留 | `go test -race` 本机无 gcc/cgo 未执行 | CI ubuntu 流水线执行并留存输出（AGENTS.md 第 6 节已记录口径） | 待 CI |
 
 ## 附录：验收会话门禁实测摘要
