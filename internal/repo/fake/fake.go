@@ -66,7 +66,8 @@ type Store struct {
 
 func NewStore() *Store { return &Store{st: newState()} }
 
-func (s *Store) Repos() repo.Repos { return reposWith(s.st) }
+// Repos 经 shared* 包装返回活状态（与 WithinTx 互斥串行化，修复并发竞态，见 locked.go）
+func (s *Store) Repos() repo.Repos { return sharedReposWith(s) }
 
 func (s *Store) WithinTx(ctx context.Context, fn func(repo.Repos) error) error {
 	s.mu.Lock()
