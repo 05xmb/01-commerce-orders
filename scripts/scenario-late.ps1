@@ -1,0 +1,102 @@
+﻿# 场景联调：S4 迟到支付（超时关单→成功通知晚到→异常台账→客服退款→不回补库存）
+# 教学时钟演示配置 PayTimeoutSeconds=30；渠道 late 场景延迟 40s 送达
+param(
+  [string]$Base = "http://127.0.0.1:8888",
+  [string]$Channel = "http://127.0.0.1:8902",
+  [int]$WaitCloseSec = 33,
+  [int]$WaitLateSec = 10
+)
+$ErrorActionPreference = "Stop"
+
+# 口令经环境变量注入（本地 .env / 部署运行环境），仓库不存明文口令
+if (-not $env:SEED_PASSWORD) {
+  $envPath = Join-Path (Split-Path -Parent $PSScriptRoot) '.env'
+  if (Test-Path $envPath) {
+    Get-Content -Encoding UTF8 $envPath | ForEach-Object {
+      if ($_ -match '^\s*([^#=]+)=(.*)$') { Set-Item -Path ('env:' + $matches[1].Trim()) -Value $matches[2].Trim() }
+    }
+  }
+}
+if (-not $env:SEED_PASSWORD) { throw '缺少 SEED_PASSWORD：请在本地 .env 或运行环境注入（仓库不存明文口令）' }
+
+function Login($user) {
+  $json = @{ username = $user; password = $env:SEED_PASSWORD } | ConvertTo-Json -Compress
+  $r = Invoke-RestMethod -Method Post "$Base/api/login" -ContentType 'application/json; charset=utf-8' `
+    -Body ([Text.Encoding]::UTF8.GetBytes($json))
+  return @{ Authorization = "Bearer $($r.data.token)" }
+}
+function PostJson($url, $headers, $obj) {
+  $json = $obj | ConvertTo-Json -Compress
+  return Invoke-RestMethod -Method Post $url -Headers $headers -ContentType 'application/json; charset=utf-8' `
+    -Body ([Text.Encoding]::UTF8.GetBytes($json))
+}
+
+$bh = Login "buyer03"
+$ch = Login "cs01"
+$op = Login "op01"
+
+Write-Host "== [1] 下单后放弃支付，等超时关单 ==" -ForegroundColor Cyan
+$before = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
+$o = PostJson "$Base/api/orders/create" $bh @{ product_id = "P1"; qty = 1 }
+$no = $o.data.order_no
+$afterOrder = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
+Write-Host "  下单 $no，P1 可售 $($before.stock) → $($afterOrder.stock)（占用 1）"
+Write-Host "  等待 ${WaitCloseSec}s 让订单超时关闭..."
+Start-Sleep -Seconds $WaitCloseSec
+$o1 = Invoke-RestMethod "$Base/api/orders/get?order_no=$no" -Headers $bh
+if ($o1.data.status -ne "closed") { throw "应已超时关闭，实际 $($o1.data.status)" }
+$afterClose = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
+# 权威红线以本单流水为准（占用1/释放1）；绝对库存对其他订单同窗口的释放容错
+$fl1 = @((Invoke-RestMethod "$Base/api/ops/stock-flows?product_id=P1" -Headers $op).data | Where-Object { $_.order_no -eq $no })
+if (@($fl1 | Where-Object { $_.change_type -eq "release" }).Count -ne 1) { throw "关单应释放恰好 1 次" }
+if ($afterClose.stock -lt $before.stock) { throw "关单后库存不应低于 $($before.stock)，实际 $($afterClose.stock)" }
+Write-Host "  订单已关闭，本单释放恰好 1 次，库存 $($afterClose.stock)（≥基线 $($before.stock)）"
+
+Write-Host "== [2] 渠道迟到通知（订单关闭后成功支付晚到） ==" -ForegroundColor Cyan
+Invoke-RestMethod -Method Post "$Channel/channel/pay" -ContentType 'application/json' `
+  -Body (@{ order_no = $no; amount = $o.data.amount; scenario = "success"; delay_ms = 0 } | ConvertTo-Json -Compress) | Out-Null
+Start-Sleep -Seconds 2
+$o2 = Invoke-RestMethod "$Base/api/orders/get?order_no=$no" -Headers $bh
+if ($o2.data.status -ne "closed") { throw "迟到支付不得复活订单，实际 $($o2.data.status)" }
+$afterLate = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
+# 红线：本单不得新增任何流水（重占会多出 occupy）；绝对库存对并发释放容错
+$fl2 = @((Invoke-RestMethod "$Base/api/ops/stock-flows?product_id=P1" -Headers $op).data | Where-Object { $_.order_no -eq $no })
+if ($fl2.Count -ne $fl1.Count) { throw "迟到支付不得给本单新增流水，实际 $($fl2.Count) 条（关单时 $($fl1.Count) 条）" }
+if ($afterLate.stock -lt $afterClose.stock) { throw "迟到支付不得重新占用库存，实际 $($afterLate.stock)" }
+Write-Host "  订单仍为 closed，本单无新增流水（不复活、不重占）"
+
+Write-Host "== [3] 异常支付台账出现记录 ==" -ForegroundColor Cyan
+$exs = (Invoke-RestMethod "$Base/api/cs/exceptions?status=pending" -Headers $ch).data
+$ex = $exs | Where-Object { $_.order_no -eq $no }
+if (-not $ex) { throw "异常台账应有该订单记录" }
+Write-Host "  异常 #$($ex.id) trade=$($ex.trade_no) 金额 $($ex.amount) 待处理"
+
+Write-Host "== [4] 客服核实并发起退款（type=late，首次失败重试成功） ==" -ForegroundColor Cyan
+PostJson "$Base/api/cs/exceptions/refund" $ch @{ id = $ex.id } | Out-Null
+Start-Sleep -Milliseconds 1200
+# 首次失败 → 重试
+$rfList = (Invoke-RestMethod "$Base/api/cs/refunds?status=failed_pending" -Headers $ch).data
+$rf = $rfList | Where-Object { $_.order_no -eq $no }
+if (-not $rf) { throw "迟到退款首次应失败待处理" }
+Write-Host "  首次渠道退款失败（$($rf.refund_no)），客服重试..."
+PostJson "$Base/api/cs/refunds/retry" $ch @{ refund_no = $rf.refund_no } | Out-Null
+Start-Sleep -Milliseconds 1200
+$rfOk = (Invoke-RestMethod "$Base/api/cs/refunds?status=success" -Headers $ch).data | Where-Object { $_.order_no -eq $no }
+if (-not $rfOk) { throw "重试后应退款成功" }
+Write-Host "  重试成功（attempt=$($rfOk.attempt)）"
+
+Write-Host "== [5] 红线核验：退款不回补库存、异常台账核销、无重复流水 ==" -ForegroundColor Cyan
+$final = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
+# 红线：退款不得给本单新增回补流水（下方 restore==0 为权威）；绝对库存容错
+if ($final.stock -lt $afterLate.stock) { throw "迟到支付退款后库存不应减少：应 ≥$($afterLate.stock)，实际 $($final.stock)" }
+$exAfter = (Invoke-RestMethod "$Base/api/cs/exceptions" -Headers $ch).data | Where-Object { $_.order_no -eq $no }
+if ($exAfter.status -ne "refunded") { throw "异常台账应核销为 refunded，实际 $($exAfter.status)" }
+$flows = @((Invoke-RestMethod "$Base/api/ops/stock-flows?product_id=P1" -Headers $op).data | Where-Object { $_.order_no -eq $no })
+$occupy = @($flows | Where-Object { $_.change_type -eq "occupy" }).Count
+$release = @($flows | Where-Object { $_.change_type -eq "release" }).Count
+$restore = @($flows | Where-Object { $_.change_type -eq "restore" }).Count
+if ($occupy -ne 1 -or $release -ne 1 -or $restore -ne 0) {
+  throw "流水应为 占用1/释放1/回补0，实际 $occupy/$release/$restore"
+}
+Write-Host "  库存保持 $($final.stock)；流水 占用$occupy/释放$release/回补$restore；异常台账已核销"
+Write-Host "`n冒烟通过：S4 迟到支付（不复活、不重占、退款不回补、无重复流水）✅" -ForegroundColor Green

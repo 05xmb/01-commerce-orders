@@ -1,0 +1,32 @@
+# 线上部署清单（1Panel 拉取镜像后按本编排运行；MySQL/Redis 使用面板已有实例，经环境变量注入）
+services:
+  trade-api:
+    image: ${DOCKER_REPO}/trade-app:${TAG}
+    environment:
+      ROLE: server
+      MYSQL_DSN: ${MYSQL_DSN}
+      REDIS_ADDR: ${REDIS_ADDR}
+      REDIS_PASS: ${REDIS_PASS}
+      CHANNEL_SECRET: ${CHANNEL_SECRET}
+      SEED_PASSWORD: ${SEED_PASSWORD}
+      CHANNEL_BASE_URL: http://pay-channel:8901
+    restart: always
+
+  pay-channel:
+    image: ${DOCKER_REPO}/trade-app:${TAG}
+    environment:
+      ROLE: channel
+      CHANNEL_SECRET: ${CHANNEL_SECRET}
+      TRADE_NOTIFY_URL: http://trade-api:8888
+    restart: always
+
+  web:
+    image: ${DOCKER_REPO}/trade-app:${TAG}
+    environment:
+      ROLE: web
+    ports:
+      - "${APP_PORT}:80"
+    depends_on:
+      - trade-api
+      - pay-channel
+    restart: always

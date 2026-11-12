@@ -1,0 +1,13 @@
+# 模拟支付渠道配置（独立第三方角色）
+Name: pay-channel
+Host: 0.0.0.0
+Port: 8902
+Timeout: 3000
+
+ChannelSecret: ${CHANNEL_SECRET}
+# 回调交易系统通知接口
+TradeNotifyURL: ${TRADE_NOTIFY_URL}
+# 支付通知默认延迟（毫秒），0 为立即
+PayNotifyDelayMs: 0
+# 迟到支付场景延迟（毫秒），需大于演示关单时长 30s
+LateNotifyDelayMs: 40000

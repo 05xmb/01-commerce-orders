@@ -1,0 +1,15 @@
+# Docker 构建上下文排除
+.git
+.codebuddy
+.github
+node_modules
+web/node_modules
+web/dist
+dist
+docs
+prototype
+*.out
+.env
+.env.*
+!.env.example
+coverage
