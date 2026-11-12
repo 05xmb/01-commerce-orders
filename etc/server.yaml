@@ -1,0 +1,14 @@
+# 交易服务配置（非敏感项；敏感项经 ${ENV} 注入，见 .env.example）
+Name: trade-api
+Host: 0.0.0.0
+Port: 8888
+Timeout: 3000
+
+MysqlDSN: ${MYSQL_DSN}
+RedisAddr: ${REDIS_ADDR}
+RedisPass: ${REDIS_PASS}
+ChannelSecret: ${CHANNEL_SECRET}
+ChannelBaseURL: ${CHANNEL_BASE_URL}
+
+# 教学时钟：待付款保留秒数。生产 600，演示 30。修改本文件即生效，无需重启/重编译（动态读取）。
+PayTimeoutSeconds: 30
