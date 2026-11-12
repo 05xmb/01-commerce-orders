@@ -11,8 +11,8 @@ RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/trade-api ./cmd/server \
 
 FROM node:20-alpine AS webbuild
 WORKDIR /web
-RUN corepack enable
-COPY web/package.json web/pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare pnpm@12.16.1 --activate
+COPY web/package.json web/pnpm-lock.yaml web/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY web .
 RUN pnpm build
