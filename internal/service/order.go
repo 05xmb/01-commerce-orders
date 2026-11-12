@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"trade/internal/pkg/idgen"
@@ -103,7 +104,18 @@ func (s *OrderService) Cancel(ctx context.Context, orderNo, buyerID string) erro
 	if o.Status != types.OrderPending {
 		return types.ErrStatus
 	}
-	return s.closeOne(ctx, orderNo, types.CloseByCancel)
+	if err := s.closeOne(ctx, orderNo, types.CloseByCancel); err != nil {
+		return err
+	}
+	// 并发支付获胜时 closeOne 幂等返回但订单已非关闭（审计 L-8）：如实反馈，不得误导"已取消"
+	fresh, err := s.d.Store.Repos().Orders.Get(ctx, orderNo)
+	if err != nil {
+		return err
+	}
+	if fresh.Status != types.OrderClosed {
+		return types.ErrStatus
+	}
+	return nil
 }
 
 // CloseExpired 超时关单（定时扫描入口，服务端时间判定，A5）
@@ -116,6 +128,8 @@ func (s *OrderService) CloseExpired(ctx context.Context) (int, error) {
 	for _, o := range expired {
 		if err := s.closeOne(ctx, o.OrderNo, types.CloseByTimeout); err == nil {
 			n++
+		} else {
+			log.Printf("超时关单失败 order=%s: %v（下轮扫描重试）", o.OrderNo, err) // 审计 L-6：失败必须可观测
 		}
 	}
 	return n, nil
@@ -132,10 +146,11 @@ func (s *OrderService) closeIfExpired(ctx context.Context, o types.Order) types.
 	return o
 }
 
-// OrderView 订单详情视图：订单本体 + 发货信息（买家查看物流，R7）
+// OrderView 订单详情视图：订单本体 + 发货信息（买家查看物流，R7）+ 退款记录（买家可见退款进度与拒绝原因，审计 L-3）
 type OrderView struct {
 	types.Order
 	Shipment *types.Shipment `json:"shipment,omitempty"`
+	Refunds  []types.Refund  `json:"refunds,omitempty"`
 }
 
 func (s *OrderService) Get(ctx context.Context, orderNo, userID, role string) (OrderView, error) {
@@ -154,6 +169,9 @@ func (s *OrderService) Get(ctx context.Context, orderNo, userID, role string) (O
 		} else if !errors.Is(err, types.ErrNotFound) {
 			return OrderView{}, err
 		}
+	}
+	if v.Refunds, err = s.d.Store.Repos().Refunds.ListByOrder(ctx, o.OrderNo); err != nil {
+		return OrderView{}, err
 	}
 	return v, nil
 }

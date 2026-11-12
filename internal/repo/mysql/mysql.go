@@ -361,19 +361,19 @@ func (r payLogRepo) ListByOrder(ctx context.Context, orderNo string) ([]types.Pa
 // ---------- refund ----------
 type refundRepo struct{ q execer }
 
-const refundCols = `refund_no,order_no,amount,type,status,reason,cs_note,channel_refund_no,attempt,created_at`
+const refundCols = `refund_no,order_no,amount,type,status,reason,cs_id,cs_note,channel_refund_no,attempt,created_at`
 
 func (r refundRepo) Insert(ctx context.Context, rf types.Refund) error {
 	_, err := r.q.ExecContext(ctx,
-		`INSERT INTO refund(`+refundCols+`) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		rf.RefundNo, rf.OrderNo, rf.Amount, rf.Type, rf.Status, rf.Reason, rf.CsNote, rf.ChannelRefundNo, rf.Attempt, rf.CreatedAt)
+		`INSERT INTO refund(`+refundCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+		rf.RefundNo, rf.OrderNo, rf.Amount, rf.Type, rf.Status, rf.Reason, rf.CsID, rf.CsNote, rf.ChannelRefundNo, rf.Attempt, rf.CreatedAt)
 	return err
 }
 
 func scanRefund(row interface{ Scan(...any) error }) (types.Refund, error) {
 	var rf types.Refund
 	err := row.Scan(&rf.RefundNo, &rf.OrderNo, &rf.Amount, &rf.Type, &rf.Status, &rf.Reason,
-		&rf.CsNote, &rf.ChannelRefundNo, &rf.Attempt, &rf.CreatedAt)
+		&rf.CsID, &rf.CsNote, &rf.ChannelRefundNo, &rf.Attempt, &rf.CreatedAt)
 	return rf, err
 }
 
@@ -435,16 +435,16 @@ func condUpdate(ctx context.Context, q execer, query string, args ...any) (bool,
 	return n == 1, err
 }
 
-func (r refundRepo) Approve(ctx context.Context, refundNo, note string) (bool, error) {
+func (r refundRepo) Approve(ctx context.Context, refundNo, csID, note string) (bool, error) {
 	return condUpdate(ctx, r.q,
-		`UPDATE refund SET status=?, cs_note=?, attempt=attempt+1 WHERE refund_no=? AND status=?`,
-		types.RefundRefunding, note, refundNo, types.RefundReview)
+		`UPDATE refund SET status=?, cs_id=?, cs_note=?, attempt=attempt+1 WHERE refund_no=? AND status=?`,
+		types.RefundRefunding, csID, note, refundNo, types.RefundReview)
 }
 
-func (r refundRepo) Reject(ctx context.Context, refundNo, note string) (bool, error) {
+func (r refundRepo) Reject(ctx context.Context, refundNo, csID, note string) (bool, error) {
 	return condUpdate(ctx, r.q,
-		`UPDATE refund SET status=?, cs_note=? WHERE refund_no=? AND status=?`,
-		types.RefundRejected, note, refundNo, types.RefundReview)
+		`UPDATE refund SET status=?, cs_id=?, cs_note=? WHERE refund_no=? AND status=?`,
+		types.RefundRejected, csID, note, refundNo, types.RefundReview)
 }
 
 func (r refundRepo) AttachChannel(ctx context.Context, refundNo, channelRefundNo string) error {
@@ -454,9 +454,10 @@ func (r refundRepo) AttachChannel(ctx context.Context, refundNo, channelRefundNo
 }
 
 func (r refundRepo) MarkRefunding(ctx context.Context, refundNo string) (bool, error) {
+	// 允许 failed_pending 与卡住的 refunding（审计 M-1：批准与渠道请求间崩溃的恢复入口）
 	return condUpdate(ctx, r.q,
-		`UPDATE refund SET status=?, attempt=attempt+1 WHERE refund_no=? AND status=?`,
-		types.RefundRefunding, refundNo, types.RefundFailedPending)
+		`UPDATE refund SET status=?, attempt=attempt+1 WHERE refund_no=? AND status IN (?,?)`,
+		types.RefundRefunding, refundNo, types.RefundFailedPending, types.RefundRefunding)
 }
 
 func (r refundRepo) MarkFailedPending(ctx context.Context, refundNo string) (bool, error) {

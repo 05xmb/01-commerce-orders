@@ -147,6 +147,7 @@ type Refund struct {
 	Type            string    `db:"type" json:"type"`
 	Status          string    `db:"status" json:"status"`
 	Reason          string    `db:"reason" json:"reason"`
+	CsID            string    `db:"cs_id" json:"cs_id"` // 审核/发起操作的客服（审计追溯，R8）
 	CsNote          string    `db:"cs_note" json:"cs_note"`
 	ChannelRefundNo string    `db:"channel_refund_no" json:"channel_refund_no"`
 	Attempt         int       `db:"attempt" json:"attempt"`

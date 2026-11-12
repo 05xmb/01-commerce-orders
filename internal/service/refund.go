@@ -52,18 +52,24 @@ func (s *RefundService) Review(ctx context.Context, refundNo, csID string, appro
 			if err != nil {
 				return err
 			}
-			ok, err := r.Refunds.Reject(ctx, refundNo, note)
+			ok, err := r.Refunds.Reject(ctx, refundNo, csID, note)
 			if err != nil {
 				return err
 			}
 			if !ok {
 				return types.ErrStatus
 			}
-			_, err = r.Orders.SetStatusCond(ctx, rf.OrderNo, types.OrderRefundReview, types.OrderToShip)
-			return err
+			ok, err = r.Orders.SetStatusCond(ctx, rf.OrderNo, types.OrderRefundReview, types.OrderToShip)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return types.ErrStatus // 订单已脱离审核中（审计 L-5）：回滚，不得静默放行
+			}
+			return nil
 		})
 	}
-	ok, err := s.d.Store.Repos().Refunds.Approve(ctx, refundNo, note)
+	ok, err := s.d.Store.Repos().Refunds.Approve(ctx, refundNo, csID, note)
 	if err != nil {
 		return err
 	}
@@ -81,13 +87,16 @@ func (s *RefundService) requestChannel(ctx context.Context, refundNo string) err
 	}
 	channelNo, err := s.d.Channel.RequestRefund(ctx, rf.RefundNo, rf.Amount)
 	if err != nil {
-		_, _ = s.d.Store.Repos().Refunds.MarkFailedPending(ctx, refundNo)
+		// 渠道失败：本地标记为失败待处理；标记本身失败必须暴露（审计 L-1），不得静默 nil
+		if _, merr := s.d.Store.Repos().Refunds.MarkFailedPending(ctx, refundNo); merr != nil {
+			return fmt.Errorf("渠道调用失败(%v)且本地标记失败: %w", err, merr)
+		}
 		return nil
 	}
 	return s.d.Store.Repos().Refunds.AttachChannel(ctx, refundNo, channelNo)
 }
 
-// Retry 客服重试失败的退款（R6）
+// Retry 客服重试退款：覆盖失败待处理与卡住的退款中（审计 M-1：批准与渠道请求间崩溃的恢复入口）
 func (s *RefundService) Retry(ctx context.Context, refundNo string) error {
 	ok, err := s.d.Store.Repos().Refunds.MarkRefunding(ctx, refundNo)
 	if err != nil {
@@ -153,8 +162,12 @@ func (s *RefundService) HandleNotify(ctx context.Context, n types.RefundNotifica
 				return errRefundRace // 并发/重复：只认一次成功
 			}
 			if rf.Type == types.RefundTypePresale {
-				if _, err := r.Orders.SetStatusCond(ctx, rf.OrderNo, types.OrderRefundReview, types.OrderRefunded); err != nil {
+				ok, err := r.Orders.SetStatusCond(ctx, rf.OrderNo, types.OrderRefundReview, types.OrderRefunded)
+				if err != nil {
 					return err
+				}
+				if !ok {
+					return errRefundRace // 订单未处于退款审核中（审计 L-5）：整体回滚，不得账实分离
 				}
 				o, err := r.Orders.Get(ctx, rf.OrderNo)
 				if err != nil {
@@ -185,6 +198,8 @@ func (s *RefundService) HandleNotify(ctx context.Context, n types.RefundNotifica
 		logResult(true, types.NotifySuccess)
 		return types.NotifySuccess, nil
 	default:
+		// 非法结果也必须留痕（审计 L-4），否则渠道重试时无任何可查记录
+		logResult(true, "invalid_result")
 		return "", types.ErrParam
 	}
 }
@@ -210,7 +225,7 @@ func (s *RefundService) RefundException(ctx context.Context, exceptionID int64, 
 		rf = types.Refund{
 			RefundNo: idgen.RefundNo(s.d.Clock()), OrderNo: ex.OrderNo, Amount: ex.Amount,
 			Type: types.RefundTypeLate, Status: types.RefundRefunding,
-			Reason: "迟到支付退款", CsNote: "客服核实异常支付发起",
+			Reason: "迟到支付退款", CsID: csID, CsNote: "客服核实异常支付发起",
 			Attempt: 1, CreatedAt: s.d.Clock(),
 		}
 		ok, err := r.Exceptions.AttachRefund(ctx, ex.ID, csID, rf.RefundNo, s.d.Clock())

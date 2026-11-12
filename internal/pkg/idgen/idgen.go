@@ -18,14 +18,19 @@ func randSuffix() uint64 {
 	return atomic.AddUint64(&seq, 1) % 1000000
 }
 
-// OrderNo 生成订单号：O + yyyyMMdd + 6 位随机序列（唯一索引兜底，冲突重试）
-func OrderNo(now time.Time) string {
-	return fmt.Sprintf("O%s%06d", now.Format("20060102"), randSuffix())
+// uniqueSuffix 进程内唯一序列（原子自增）：订单号/退款单号以唯一性为先，不用纯随机（生日悖论会碰撞）
+func uniqueSuffix() uint64 {
+	return atomic.AddUint64(&seq, 1) % 1000000
 }
 
-// RefundNo 生成退款单号：R + yyyyMMdd + 6 位随机序列
+// OrderNo 生成订单号：O + yyyyMMdd + 6 位唯一序列（进程内原子自增；唯一索引兜底，冲突重试）
+func OrderNo(now time.Time) string {
+	return fmt.Sprintf("O%s%06d", now.Format("20060102"), uniqueSuffix())
+}
+
+// RefundNo 生成退款单号：R + yyyyMMdd + 6 位唯一序列
 func RefundNo(now time.Time) string {
-	return fmt.Sprintf("R%s%06d", now.Format("20060102"), randSuffix())
+	return fmt.Sprintf("R%s%06d", now.Format("20060102"), uniqueSuffix())
 }
 
 // Token 生成登录 token

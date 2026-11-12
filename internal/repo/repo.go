@@ -57,10 +57,10 @@ type RefundRepo interface {
 	Get(ctx context.Context, refundNo string) (types.Refund, error)
 	ListByOrder(ctx context.Context, orderNo string) ([]types.Refund, error)
 	ListByStatus(ctx context.Context, statuses ...string) ([]types.Refund, error)
-	// Approve 审核通过：review → refunding，记录客服备注
-	Approve(ctx context.Context, refundNo, note string) (bool, error)
-	// Reject 审核拒绝：review → rejected
-	Reject(ctx context.Context, refundNo, note string) (bool, error)
+	// Approve 审核通过：review → refunding，记录审核客服与备注
+	Approve(ctx context.Context, refundNo, csID, note string) (bool, error)
+	// Reject 审核拒绝：review → rejected，记录审核客服与备注
+	Reject(ctx context.Context, refundNo, csID, note string) (bool, error)
 	AttachChannel(ctx context.Context, refundNo, channelRefundNo string) error
 	// MarkRefunding 失败待处理 → 退款中（attempt+1）
 	MarkRefunding(ctx context.Context, refundNo string) (bool, error)

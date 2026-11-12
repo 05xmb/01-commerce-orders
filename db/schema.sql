@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS refund (
   type              VARCHAR(16) NOT NULL COMMENT 'presale/late',
   status            VARCHAR(20) NOT NULL,
   reason            VARCHAR(255) NOT NULL DEFAULT '',
+  cs_id             VARCHAR(32)  NOT NULL DEFAULT '' COMMENT '审核/发起操作的客服',
   cs_note           VARCHAR(255) NOT NULL DEFAULT '',
   channel_refund_no VARCHAR(64) NOT NULL DEFAULT '',
   attempt           INT         NOT NULL DEFAULT 0,

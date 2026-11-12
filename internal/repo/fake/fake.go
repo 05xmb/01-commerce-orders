@@ -428,7 +428,7 @@ func (r *refundRepo) ListByStatus(_ context.Context, statuses ...string) ([]type
 	return out, nil
 }
 
-func (r *refundRepo) Approve(_ context.Context, refundNo, note string) (bool, error) {
+func (r *refundRepo) Approve(_ context.Context, refundNo, csID, note string) (bool, error) {
 	rf, ok := r.st.refunds[refundNo]
 	if !ok {
 		return false, types.ErrRefundNotFound
@@ -437,13 +437,14 @@ func (r *refundRepo) Approve(_ context.Context, refundNo, note string) (bool, er
 		return false, nil
 	}
 	rf.Status = types.RefundRefunding
+	rf.CsID = csID
 	rf.CsNote = note
 	rf.Attempt++
 	r.st.refunds[refundNo] = rf
 	return true, nil
 }
 
-func (r *refundRepo) Reject(_ context.Context, refundNo, note string) (bool, error) {
+func (r *refundRepo) Reject(_ context.Context, refundNo, csID, note string) (bool, error) {
 	rf, ok := r.st.refunds[refundNo]
 	if !ok {
 		return false, types.ErrRefundNotFound
@@ -452,6 +453,7 @@ func (r *refundRepo) Reject(_ context.Context, refundNo, note string) (bool, err
 		return false, nil
 	}
 	rf.Status = types.RefundRejected
+	rf.CsID = csID
 	rf.CsNote = note
 	r.st.refunds[refundNo] = rf
 	return true, nil
@@ -472,7 +474,8 @@ func (r *refundRepo) MarkRefunding(_ context.Context, refundNo string) (bool, er
 	if !ok {
 		return false, types.ErrRefundNotFound
 	}
-	if rf.Status != types.RefundFailedPending {
+	// 允许 failed_pending 与卡住的 refunding（审计 M-1）
+	if rf.Status != types.RefundFailedPending && rf.Status != types.RefundRefunding {
 		return false, nil
 	}
 	rf.Status = types.RefundRefunding
