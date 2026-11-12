@@ -323,20 +323,20 @@ func TestRefundRepo(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatal("ListByStatus 应返回 1 条")
 	}
-	// Approve：审核中 → 退款中（Attempt+1）
-	ok, err := r.Refunds.Approve(ctx, "R1", "同意")
+	// Approve：审核中 → 退款中（Attempt+1，记录审核客服）
+	ok, err := r.Refunds.Approve(ctx, "R1", "cs1", "同意")
 	if !ok || err != nil {
 		t.Fatal("Approve 应成功")
 	}
 	got, _ = r.Refunds.Get(ctx, "R1")
-	if got.Status != types.RefundRefunding || got.Attempt != 1 || got.CsNote != "同意" {
+	if got.Status != types.RefundRefunding || got.Attempt != 1 || got.CsNote != "同意" || got.CsID != "cs1" {
 		t.Fatalf("Approve 状态错误: %+v", got)
 	}
-	ok, _ = r.Refunds.Approve(ctx, "R1", "重复")
+	ok, _ = r.Refunds.Approve(ctx, "R1", "cs1", "重复")
 	if ok {
 		t.Fatal("非审核中不应重复同意")
 	}
-	if _, err := r.Refunds.Approve(ctx, "none", "x"); !errors.Is(err, types.ErrRefundNotFound) {
+	if _, err := r.Refunds.Approve(ctx, "none", "cs1", "x"); !errors.Is(err, types.ErrRefundNotFound) {
 		t.Fatal("不存在应 ErrRefundNotFound")
 	}
 	// AttachChannel
@@ -371,9 +371,10 @@ func TestRefundRepo(t *testing.T) {
 	if got.Status != types.RefundRefunding || got.Attempt != 2 {
 		t.Fatalf("重试应退款中且 Attempt=2: %+v", got)
 	}
+	// 审计 M-1：卡住的 refunding 允许再次重试（恢复入口）
 	ok, _ = r.Refunds.MarkRefunding(ctx, "R1")
-	if ok {
-		t.Fatal("非失败待处理不应重试")
+	if !ok {
+		t.Fatal("refunding 卡住态应允许重试")
 	}
 	// MarkSuccess
 	ok, err = r.Refunds.MarkSuccess(ctx, "R1")
@@ -384,25 +385,30 @@ func TestRefundRepo(t *testing.T) {
 	if ok {
 		t.Fatal("已成功不应重复")
 	}
+	// 已成功状态不可再重试
+	ok, _ = r.Refunds.MarkRefunding(ctx, "R1")
+	if ok {
+		t.Fatal("已退款不应再重试")
+	}
 	if _, err := r.Refunds.MarkSuccess(ctx, "none"); !errors.Is(err, types.ErrRefundNotFound) {
 		t.Fatal("不存在应 ErrRefundNotFound")
 	}
-	// Reject（用新单）
+	// Reject（用新单，记录审核客服）
 	rf2 := types.Refund{RefundNo: "R2", OrderNo: "O1", Amount: 50, Status: types.RefundReview, CreatedAt: time.Now()}
 	_ = r.Refunds.Insert(ctx, rf2)
-	ok, err = r.Refunds.Reject(ctx, "R2", "拒绝")
+	ok, err = r.Refunds.Reject(ctx, "R2", "cs2", "拒绝")
 	if !ok || err != nil {
 		t.Fatal("Reject 应成功")
 	}
 	got, _ = r.Refunds.Get(ctx, "R2")
-	if got.Status != types.RefundRejected {
-		t.Fatal("应已拒绝")
+	if got.Status != types.RefundRejected || got.CsID != "cs2" {
+		t.Fatalf("应已拒绝且记录客服: %+v", got)
 	}
-	ok, _ = r.Refunds.Reject(ctx, "R2", "重复")
+	ok, _ = r.Refunds.Reject(ctx, "R2", "cs2", "重复")
 	if ok {
 		t.Fatal("非审核中不应重复拒绝")
 	}
-	if _, err := r.Refunds.Reject(ctx, "none", "x"); !errors.Is(err, types.ErrRefundNotFound) {
+	if _, err := r.Refunds.Reject(ctx, "none", "cs1", "x"); !errors.Is(err, types.ErrRefundNotFound) {
 		t.Fatal("不存在应 ErrRefundNotFound")
 	}
 	// SumSuccess

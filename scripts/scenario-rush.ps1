@@ -78,4 +78,10 @@ $o = Invoke-RestMethod -Method Post "$Base/api/orders/create" -Headers (Login "b
   -Body ([Text.Encoding]::UTF8.GetBytes($newBody))
 Write-Host "  释放后新买家下单成功：$($o.data.order_no)"
 
+# 清理：立即取消该验证单，避免遗留待支付订单在后续场景的等待窗口里超时释放（脚本间状态隔离）
+$cancelBody = @{ order_no = $o.data.order_no } | ConvertTo-Json -Compress
+Invoke-RestMethod -Method Post "$Base/api/orders/cancel" -Headers (Login "buyer01") -ContentType 'application/json; charset=utf-8' `
+  -Body ([Text.Encoding]::UTF8.GetBytes($cancelBody)) | Out-Null
+Write-Host "  已取消验证单 $($o.data.order_no)（清理现场，不遗留待支付订单）"
+
 Write-Host "`n冒烟通过：S2 缺货与弃单（20 并发不超卖、超时释放回满、他人可购）✅" -ForegroundColor Green

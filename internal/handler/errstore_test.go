@@ -77,7 +77,9 @@ func (e *eRefunds) Get(context.Context, string) (types.Refund, error) {
 func (e *eRefunds) ListByStatus(context.Context, ...string) ([]types.Refund, error) {
 	return nil, errTest
 }
-func (e *eRefunds) Approve(context.Context, string, string) (bool, error) { return false, errTest }
+func (e *eRefunds) Approve(context.Context, string, string, string) (bool, error) {
+	return false, errTest
+}
 func (e *eRefunds) MarkRefunding(context.Context, string) (bool, error) {
 	return false, errTest
 }

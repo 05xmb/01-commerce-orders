@@ -269,18 +269,18 @@ func (w *failRefunds) Get(ctx context.Context, refundNo string) (types.Refund, e
 	return w.RefundRepo.Get(ctx, refundNo)
 }
 
-func (w *failRefunds) Approve(ctx context.Context, refundNo, note string) (bool, error) {
+func (w *failRefunds) Approve(ctx context.Context, refundNo, csID, note string) (bool, error) {
 	if err := w.p.take("Refunds.Approve"); err != nil {
 		return false, err
 	}
-	return w.RefundRepo.Approve(ctx, refundNo, note)
+	return w.RefundRepo.Approve(ctx, refundNo, csID, note)
 }
 
-func (w *failRefunds) Reject(ctx context.Context, refundNo, note string) (bool, error) {
+func (w *failRefunds) Reject(ctx context.Context, refundNo, csID, note string) (bool, error) {
 	if err := w.p.take("Refunds.Reject"); err != nil {
 		return false, err
 	}
-	return w.RefundRepo.Reject(ctx, refundNo, note)
+	return w.RefundRepo.Reject(ctx, refundNo, csID, note)
 }
 
 func (w *failRefunds) MarkRefunding(ctx context.Context, refundNo string) (bool, error) {

@@ -35,8 +35,11 @@ Start-Sleep -Seconds $WaitCloseSec
 $o1 = Invoke-RestMethod "$Base/api/orders/get?order_no=$no" -Headers $bh
 if ($o1.data.status -ne "closed") { throw "应已超时关闭，实际 $($o1.data.status)" }
 $afterClose = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
-if ($afterClose.stock -ne $before.stock) { throw "关单后库存应恢复为 $($before.stock)，实际 $($afterClose.stock)" }
-Write-Host "  订单已关闭，库存恢复为 $($afterClose.stock)（释放恰好 1 次）"
+# 权威红线以本单流水为准（占用1/释放1）；绝对库存对其他订单同窗口的释放容错
+$fl1 = @((Invoke-RestMethod "$Base/api/ops/stock-flows?product_id=P1" -Headers $op).data | Where-Object { $_.order_no -eq $no })
+if (@($fl1 | Where-Object { $_.change_type -eq "release" }).Count -ne 1) { throw "关单应释放恰好 1 次" }
+if ($afterClose.stock -lt $before.stock) { throw "关单后库存不应低于 $($before.stock)，实际 $($afterClose.stock)" }
+Write-Host "  订单已关闭，本单释放恰好 1 次，库存 $($afterClose.stock)（≥基线 $($before.stock)）"
 
 Write-Host "== [2] 渠道迟到通知（订单关闭后成功支付晚到） ==" -ForegroundColor Cyan
 Invoke-RestMethod -Method Post "$Channel/channel/pay" -ContentType 'application/json' `
@@ -45,8 +48,11 @@ Start-Sleep -Seconds 2
 $o2 = Invoke-RestMethod "$Base/api/orders/get?order_no=$no" -Headers $bh
 if ($o2.data.status -ne "closed") { throw "迟到支付不得复活订单，实际 $($o2.data.status)" }
 $afterLate = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
-if ($afterLate.stock -ne $before.stock) { throw "迟到支付不得重新占用库存，实际 $($afterLate.stock)" }
-Write-Host "  订单仍为 closed，库存未变（不复活、不重占）"
+# 红线：本单不得新增任何流水（重占会多出 occupy）；绝对库存对并发释放容错
+$fl2 = @((Invoke-RestMethod "$Base/api/ops/stock-flows?product_id=P1" -Headers $op).data | Where-Object { $_.order_no -eq $no })
+if ($fl2.Count -ne $fl1.Count) { throw "迟到支付不得给本单新增流水，实际 $($fl2.Count) 条（关单时 $($fl1.Count) 条）" }
+if ($afterLate.stock -lt $afterClose.stock) { throw "迟到支付不得重新占用库存，实际 $($afterLate.stock)" }
+Write-Host "  订单仍为 closed，本单无新增流水（不复活、不重占）"
 
 Write-Host "== [3] 异常支付台账出现记录 ==" -ForegroundColor Cyan
 $exs = (Invoke-RestMethod "$Base/api/cs/exceptions?status=pending" -Headers $ch).data
@@ -70,7 +76,8 @@ Write-Host "  重试成功（attempt=$($rfOk.attempt)）"
 
 Write-Host "== [5] 红线核验：退款不回补库存、异常台账核销、无重复流水 ==" -ForegroundColor Cyan
 $final = (Invoke-RestMethod "$Base/api/ops/summary" -Headers $op).data.products | Where-Object { $_.id -eq "P1" }
-if ($final.stock -ne $before.stock) { throw "迟到支付退款不得回补库存：应 $($before.stock)，实际 $($final.stock)" }
+# 红线：退款不得给本单新增回补流水（下方 restore==0 为权威）；绝对库存容错
+if ($final.stock -lt $afterLate.stock) { throw "迟到支付退款后库存不应减少：应 ≥$($afterLate.stock)，实际 $($final.stock)" }
 $exAfter = (Invoke-RestMethod "$Base/api/cs/exceptions" -Headers $ch).data | Where-Object { $_.order_no -eq $no }
 if ($exAfter.status -ne "refunded") { throw "异常台账应核销为 refunded，实际 $($exAfter.status)" }
 $flows = @((Invoke-RestMethod "$Base/api/ops/stock-flows?product_id=P1" -Headers $op).data | Where-Object { $_.order_no -eq $no })

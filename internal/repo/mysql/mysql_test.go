@@ -476,16 +476,16 @@ func TestPayLogRepo(t *testing.T) {
 
 // ---------- refund ----------
 
-var refundColList = []string{"refund_no", "order_no", "amount", "type", "status", "reason", "cs_note", "channel_refund_no", "attempt", "created_at"}
+var refundColList = []string{"refund_no", "order_no", "amount", "type", "status", "reason", "cs_id", "cs_note", "channel_refund_no", "attempt", "created_at"}
 
 func TestRefundRepo(t *testing.T) {
 	ctx := context.Background()
 	r, mock, _ := newMock(t)
-	refundCols := `refund_no,order_no,amount,type,status,reason,cs_note,channel_refund_no,attempt,created_at`
+	refundCols := `refund_no,order_no,amount,type,status,reason,cs_id,cs_note,channel_refund_no,attempt,created_at`
 
 	// Insert
-	mock.ExpectExec(`INSERT INTO refund(`+refundCols+`) VALUES(?,?,?,?,?,?,?,?,?,?)`).
-		WithArgs("R1", "O1", int64(100), "presale", "review", "不想要了", "", "", 0, testTime).
+	mock.ExpectExec(`INSERT INTO refund(`+refundCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).
+		WithArgs("R1", "O1", int64(100), "presale", "review", "不想要了", "", "", "", 0, testTime).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	rf := types.Refund{RefundNo: "R1", OrderNo: "O1", Amount: 100, Type: "presale", Status: "review", Reason: "不想要了", CreatedAt: testTime}
 	if err := r.Refunds.Insert(ctx, rf); err != nil {
@@ -494,7 +494,7 @@ func TestRefundRepo(t *testing.T) {
 
 	// Get：命中 / 不存在→ErrRefundNotFound / 错误
 	mock.ExpectQuery(`SELECT ` + refundCols + ` FROM refund WHERE refund_no=?`).WithArgs("R1").
-		WillReturnRows(sqlmock.NewRows(refundColList).AddRow("R1", "O1", 100, "presale", "review", "不想要了", "", "", 0, testTime))
+		WillReturnRows(sqlmock.NewRows(refundColList).AddRow("R1", "O1", 100, "presale", "review", "不想要了", "", "", "", 0, testTime))
 	got, err := r.Refunds.Get(ctx, "R1")
 	if err != nil || got.RefundNo != "R1" {
 		t.Fatal("Get 失败")
@@ -511,7 +511,7 @@ func TestRefundRepo(t *testing.T) {
 
 	// ListByOrder
 	mock.ExpectQuery(`SELECT ` + refundCols + ` FROM refund WHERE order_no=? ORDER BY created_at`).WithArgs("O1").
-		WillReturnRows(sqlmock.NewRows(refundColList).AddRow("R1", "O1", 100, "presale", "review", "x", "", "", 0, testTime))
+		WillReturnRows(sqlmock.NewRows(refundColList).AddRow("R1", "O1", 100, "presale", "review", "x", "cs1", "", "", 0, testTime))
 	list, err := r.Refunds.ListByOrder(ctx, "O1")
 	if err != nil || len(list) != 1 {
 		t.Fatal("ListByOrder 失败")
@@ -527,7 +527,7 @@ func TestRefundRepo(t *testing.T) {
 		t.Fatal("空状态应返回 nil")
 	}
 	mock.ExpectQuery(`SELECT ` + refundCols + ` FROM refund WHERE status IN (?) ORDER BY created_at`).WithArgs("review").
-		WillReturnRows(sqlmock.NewRows(refundColList).AddRow("R1", "O1", 100, "presale", "review", "x", "", "", 0, testTime))
+		WillReturnRows(sqlmock.NewRows(refundColList).AddRow("R1", "O1", 100, "presale", "review", "x", "cs1", "", "", 0, testTime))
 	list, err = r.Refunds.ListByStatus(ctx, "review")
 	if err != nil || len(list) != 1 {
 		t.Fatal("ListByStatus 失败")
@@ -537,16 +537,16 @@ func TestRefundRepo(t *testing.T) {
 		t.Fatal("应传递错误")
 	}
 
-	// Approve / Reject
-	mock.ExpectExec(`UPDATE refund SET status=?, cs_note=?, attempt=attempt+1 WHERE refund_no=? AND status=?`).
-		WithArgs("refunding", "同意", "R1", "review").WillReturnResult(sqlmock.NewResult(0, 1))
-	ok, err := r.Refunds.Approve(ctx, "R1", "同意")
+	// Approve / Reject（记录审核客服 cs_id）
+	mock.ExpectExec(`UPDATE refund SET status=?, cs_id=?, cs_note=?, attempt=attempt+1 WHERE refund_no=? AND status=?`).
+		WithArgs("refunding", "cs1", "同意", "R1", "review").WillReturnResult(sqlmock.NewResult(0, 1))
+	ok, err := r.Refunds.Approve(ctx, "R1", "cs1", "同意")
 	if !ok || err != nil {
 		t.Fatal("Approve 应成功")
 	}
-	mock.ExpectExec(`UPDATE refund SET status=?, cs_note=? WHERE refund_no=? AND status=?`).
-		WithArgs("rejected", "拒绝", "R1", "review").WillReturnResult(sqlmock.NewResult(0, 0))
-	ok, err = r.Refunds.Reject(ctx, "R1", "拒绝")
+	mock.ExpectExec(`UPDATE refund SET status=?, cs_id=?, cs_note=? WHERE refund_no=? AND status=?`).
+		WithArgs("rejected", "cs1", "拒绝", "R1", "review").WillReturnResult(sqlmock.NewResult(0, 0))
+	ok, err = r.Refunds.Reject(ctx, "R1", "cs1", "拒绝")
 	if ok || err != nil {
 		t.Fatal("无匹配应 false")
 	}
@@ -558,8 +558,8 @@ func TestRefundRepo(t *testing.T) {
 	}
 
 	// MarkRefunding / MarkFailedPending / MarkSuccess
-	mock.ExpectExec(`UPDATE refund SET status=?, attempt=attempt+1 WHERE refund_no=? AND status=?`).
-		WithArgs("refunding", "R1", "failed_pending").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`UPDATE refund SET status=?, attempt=attempt+1 WHERE refund_no=? AND status IN (?,?)`).
+		WithArgs("refunding", "R1", "failed_pending", "refunding").WillReturnResult(sqlmock.NewResult(0, 1))
 	ok, err = r.Refunds.MarkRefunding(ctx, "R1")
 	if !ok || err != nil {
 		t.Fatal("MarkRefunding 应成功")

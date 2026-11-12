@@ -434,11 +434,17 @@ func TestCS_Endpoints(t *testing.T) {
 		t.Fatalf("审核失败: %s", w.Body.String())
 	}
 
-	// 重试（状态非法 → 409）
+	// 重试：refunding 卡住态允许重试恢复（M-1 修复后的新语义，渠道假实现受理成功）
 	w = httptest.NewRecorder()
 	h.csRetry(w, withAuth(doJSON(t, http.MethodPost, "/api/cs/refunds/retry", `{"refund_no":"`+refund.RefundNo+`"}`), "u-cs", types.RoleCS))
-	if parseResp(t, w).Code != http.StatusConflict {
-		t.Fatal("非失败待处理重试应 409")
+	if parseResp(t, w).Code != 0 {
+		t.Fatalf("refunding 卡住态应可重试: %s", w.Body.String())
+	}
+	// 不存在的退款单重试 → 404
+	w = httptest.NewRecorder()
+	h.csRetry(w, withAuth(doJSON(t, http.MethodPost, "/api/cs/refunds/retry", `{"refund_no":"R-none"}`), "u-cs", types.RoleCS))
+	if parseResp(t, w).Code != http.StatusNotFound {
+		t.Fatal("未知退款单重试应 404")
 	}
 
 	// 异常列表

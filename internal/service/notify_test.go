@@ -139,12 +139,45 @@ func TestPayNotify_LateAfterTimeout(t *testing.T) {
 	}
 }
 
-// 已支付订单再收通知 → 重复
+// 已支付订单再收同交易号通知 → 重复（幂等）
 func TestPayNotify_AlreadyPaid(t *testing.T) {
 	f := newFixture(t)
 	o := f.createAndPay(t, "u1", "P1", 1)
-	result, _ := f.svc.Notify.PayNotify(f.ctx, f.signedPayNotify("T9", o.OrderNo, o.Amount))
+	result, _ := f.svc.Notify.PayNotify(f.ctx, f.signedPayNotify("T-"+o.OrderNo, o.OrderNo, o.Amount))
 	if result != types.NotifyDuplicate {
-		t.Fatalf("已支付订单再收通知应幂等，result=%s", result)
+		t.Fatalf("同交易号重复通知应幂等，result=%s", result)
+	}
+}
+
+// 审计 M-2 回归：已支付订单收到不同交易号的成功通知（买家重复付款）→ 入异常台账，可查询可退款
+func TestPayNotify_SecondPaymentGoesException(t *testing.T) {
+	f := newFixture(t)
+	o := f.createAndPay(t, "u1", "P1", 1)
+	stockBefore := f.product(t, "P1").Stock
+
+	// 第二笔不同交易号的成功通知（买家重复支付同一订单）
+	result, err := f.svc.Notify.PayNotify(f.ctx, f.signedPayNotify("T-second", o.OrderNo, o.Amount))
+	if err != nil || result != types.NotifyLate {
+		t.Fatalf("第二笔支付应入异常台账，result=%s err=%v", result, err)
+	}
+	// 订单状态不变、库存不变
+	if got := f.order(t, o.OrderNo); got.Status != types.OrderToShip {
+		t.Fatalf("订单应保持待发货，实际 %s", got.Status)
+	}
+	if got := f.product(t, "P1").Stock; got != stockBefore {
+		t.Fatalf("库存不应变化，实际 %d", got)
+	}
+	// 异常台账可见
+	exs, _ := f.svc.d.Store.Repos().Exceptions.List(f.ctx, types.ExceptionPending)
+	if len(exs) != 1 || exs[0].TradeNo != "T-second" {
+		t.Fatalf("异常台账应有第二笔支付记录: %+v", exs)
+	}
+	// 客服可对该笔误收款发起退款（type=late，不回补库存）
+	rf, err := f.svc.Refund.RefundException(f.ctx, exs[0].ID, "cs1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rf.Type != types.RefundTypeLate || rf.Amount != o.Amount {
+		t.Fatalf("退款类型/金额错误: %+v", rf)
 	}
 }
