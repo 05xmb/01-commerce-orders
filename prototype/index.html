@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>题目01 · 订单交易系统原型 v0.1</title>
+<style>
+  body { font-family: "Microsoft YaHei", sans-serif; margin: 0; background: #f5f6f8; color: #333; }
+  header { background: #2c3e50; color: #fff; padding: 10px 20px; }
+  header h1 { font-size: 18px; margin: 0 0 8px; }
+  header .roles button { margin-right: 8px; padding: 4px 14px; border: none; border-radius: 4px; cursor: pointer; }
+  header .roles button.active { background: #e67e22; color: #fff; }
+  main { padding: 16px 20px; }
+  section { display: none; } section.show { display: block; }
+  .tabs button { margin-right: 6px; padding: 4px 10px; border: 1px solid #ccc; background: #fff; cursor: pointer; }
+  .tabs button.active { background: #3498db; color: #fff; border-color: #3498db; }
+  .card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin: 10px 0; }
+  table { border-collapse: collapse; width: 100%; background: #fff; margin-top: 10px; }
+  th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 13px; text-align: left; }
+  th { background: #ecf0f1; }
+  button.act { padding: 3px 10px; margin: 1px; border: none; border-radius: 3px; cursor: pointer; background: #3498db; color: #fff; }
+  button.act.warn { background: #e67e22; } button.act.danger { background: #c0392b; }
+  button.act:disabled { background: #bdc3c7; cursor: not-allowed; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; background: #ecf0f1; }
+  .tag.s0 { background: #fdebd0; } .tag.s1 { background: #d4efdf; } .tag.s2 { background: #fadbd8; }
+  .tag.s3 { background: #d6eaf8; } .tag.s4 { background: #e8daef; } .tag.s5 { background: #f9e79f; }
+  .muted { color: #999; font-size: 12px; }
+  #toast { position: fixed; top: 12px; right: 12px; background: #2c3e50; color: #fff; padding: 8px 14px; border-radius: 4px; display: none; max-width: 420px; z-index: 9; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,.4); display: none; align-items: center; justify-content: center; z-index: 10; }
+  #modal .box { background: #fff; border-radius: 8px; padding: 20px; width: 380px; }
+  .stat { display: inline-block; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 18px; margin-right: 10px; }
+  .stat b { font-size: 18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Shop 商城订单交易系统 · 可点击原型 v0.1（演示数据，2026-11-12）</h1>
+  <div class="roles" id="roleBar"></div>
+</header>
+<main>
+  <!-- 买家 -->
+  <section id="sec-buyer">
+    <div class="tabs" id="buyerTabs"></div>
+    <div id="buyerPage"></div>
+  </section>
+  <!-- 仓库 -->
+  <section id="sec-wh"><h2>仓库 · 待发货工作台</h2><div id="whPage"></div></section>
+  <!-- 客服 -->
+  <section id="sec-cs">
+    <div class="tabs" id="csTabs"></div>
+    <div id="csPage"></div>
+  </section>
+  <!-- 运营 -->
+  <section id="sec-ops">
+    <div class="tabs" id="opsTabs"></div>
+    <div id="opsPage"></div>
+  </section>
+</main>
+<div id="toast"></div>
+<div id="modal"><div class="box" id="modalBox"></div></div>
+
+<script>
+// ============ 演示数据（内存态，刷新即还原） ============
+const S = {
+  role: 'buyer', buyerTab: 'goods', csTab: 'refund', opsTab: 'goods',
+  products: [
+    { id: 'P1', name: '商品A（活动款）', price: 10000, stock: 5, onSale: true },
+    { id: 'P2', name: '商品B（陪衬）', price: 5000, stock: 10, onSale: true },
+  ],
+  seq: 5,
+  orders: [
+    { no: 'O20261112000001', buyer: 'buyer01', pid: 'P1', pname: '商品A（活动款）', price: 10000, qty: 1, amount: 10000, status: '待付款', left: 30 },
+    { no: 'O20261112000002', buyer: 'buyer01', pid: 'P1', pname: '商品A（活动款）', price: 10000, qty: 2, amount: 20000, status: '待发货' },
+    { no: 'O20261112000003', buyer: 'buyer02', pid: 'P2', pname: '商品B（陪衬）', price: 5000, qty: 1, amount: 5000, status: '已发货', carrier: '顺丰', tracking: 'SF123456789' },
+    { no: 'O20261112000004', buyer: 'buyer03', pid: 'P1', pname: '商品A（活动款）', price: 10000, qty: 1, amount: 10000, status: '已关闭', closeReason: '超时未支付' },
+  ],
+  refunds: [ { no: 'R20261112000001', orderNo: 'O20261112000002', amount: 20000, type: '售前退款', status: '审核中', reason: '买重了，申请退款', csNote: '' } ],
+  exceptions: [ { id: 'EX01', orderNo: 'O20261112000004', tradeNo: 'T202611120888', amount: 10000, status: '待处理', note: '订单关闭后收到成功支付通知（迟到支付）' } ],
+  notifyLogs: [
+    { id: 'N1', orderNo: 'O20261112000002', tradeNo: 'T111001', result: '成功', detail: '验签通过，记收款 20000 分' },
+    { id: 'N2', orderNo: 'O20261112000002', tradeNo: 'T111001', result: '重复', detail: '重复通知：不重复记款' },
+    { id: 'N3', orderNo: 'O20261112000001', tradeNo: 'T222002', result: '金额不符', detail: '通知 9000 ≠ 订单 10000，已拒绝' },
+    { id: 'N4', orderNo: 'O99999999999999', tradeNo: 'T333003', result: '未知订单', detail: '已拒绝并留痕' },
+    { id: 'N5', orderNo: 'O20261112000001', tradeNo: 'T444004', result: '验签失败', detail: '签名不匹配，已拒绝' },
+  ],
+  flows: [
+    { pid: 'P1', orderNo: 'O20261112000001', type: '下单占用', qty: -1, after: 4 },
+    { pid: 'P1', orderNo: 'O20261112000002', type: '下单占用', qty: -2, after: 2 },
+    { pid: 'P2', orderNo: 'O20261112000003', type: '下单占用', qty: -1, after: 9 },
+    { pid: 'P1', orderNo: 'O20261112000004', type: '下单占用', qty: -1, after: 1 },
+    { pid: 'P1', orderNo: 'O20261112000004', type: '超时释放', qty: +1, after: 2 },
+  ],
+  events: [
+    { orderNo: 'O20261112000002', text: '下单占用 2 件 → 支付通知验签通过记收款 20000 分 → 待发货 → 买家申请退款（审核中，暂停发货）' },
+    { orderNo: 'O20261112000003', text: '下单 → 支付成功 → 仓库发货（顺丰 SF123456789）' },
+    { orderNo: 'O20261112000004', text: '下单 → 超时关闭（释放库存） → 渠道迟到成功通知 → 异常支付待处理' },
+  ],
+  paidSum: 20000, refundedSum: 0,
+};
+const fmt = n => '¥' + (n / 100).toFixed(2);
+const tag = s => { const m = { '待付款':'s0','待发货':'s1','已发货':'s3','已关闭':'s2','已退款':'s4','退款审核中':'s5','审核中':'s5','退款失败待处理':'s2','退款中':'s0','已拒绝':'s2','待处理':'s5' }; return `<span class="tag ${m[s]||''}">${s}</span>`; };
+function toast(msg) { const t = document.getElementById('toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._x); t._x = setTimeout(() => t.style.display = 'none', 2600); }
+function log(type, orderNo, tradeNo, detail) { S.notifyLogs.unshift({ id: 'N' + Date.now(), orderNo, tradeNo, result: type, detail }); }
+function flow(pid, orderNo, type, qty) { const p = S.products.find(x => x.id === pid); p.stock += qty; S.flows.unshift({ pid, orderNo, type, qty, after: p.stock }); }
+function ev(orderNo, text) { S.events.unshift({ orderNo, text }); }
+
+// ============ 角色与页签 ============
+const ROLES = [ ['buyer','买家 buyer01'], ['wh','仓库 wh01'], ['cs','客服 cs01'], ['ops','运营 op01'] ];
+function renderRoleBar() {
+  document.getElementById('roleBar').innerHTML = '角色：' + ROLES.map(([k, n]) =>
+    `<button class="${S.role===k?'active':''}" onclick="switchRole('${k}')">${n}</button>`).join('');
+}
+function switchRole(k) { S.role = k; renderAll(); }
+
+// ============ 买家页 ============
+function renderBuyer() {
+  const tabs = [ ['goods','商品列表'], ['orders','我的订单'] ];
+  document.getElementById('buyerTabs').innerHTML = tabs.map(([k,n]) =>
+    `<button class="${S.buyerTab===k?'active':''}" onclick="S.buyerTab='${k}';renderAll()">${n}</button>`).join('');
+  const el = document.getElementById('buyerPage');
+  if (S.buyerTab === 'goods') {
+    el.innerHTML = S.products.map(p => `
+      <div class="card">
+        <b>${p.name}</b> ${p.onSale ? tag('在售') : tag('已下架')}
+        <p>单价 <b>${fmt(p.price)}</b> ｜ 可售 <b>${p.stock}</b> 件 ${p.stock===0?'<span class="tag s2">已抢光</span>':''}</p>
+        ${p.onSale && p.stock>0
+          ? `数量 <select id="qty-${p.id}"><option>1</option><option>2</option></select>
+             <button class="act" onclick="createOrder('${p.id}')">抢购下单</button>`
+          : `<button class="act" disabled>${p.onSale?'库存不足':'已下架'}</button>`}
+        <div class="muted">下单即占用库存（条件更新防超卖），待付款保留 30s（教学时钟，生产 10 分钟）</div>
+      </div>`).join('');
+  } else {
+    const rows = S.orders.filter(o => o.buyer === 'buyer01').map(o => `
+      <tr><td>${o.no}</td><td>${o.pname}（快照价 ${fmt(o.price)}）× ${o.qty}</td><td>${fmt(o.amount)}</td>
+      <td>${tag(o.status)}${o.status==='待付款'?` <span class="muted">剩 ${o.left}s</span>`:''}${o.closeReason?` <span class="muted">${o.closeReason}</span>`:''}</td>
+      <td>${buyerOps(o)}</td></tr>`).join('');
+    el.innerHTML = `<table><tr><th>订单号</th><th>商品（快照）</th><th>金额</th><th>状态</th><th>操作</th></tr>${rows}</table>`;
+  }
+}
+function buyerOps(o) {
+  const ops = [];
+  if (o.status === '待付款') {
+    ops.push(`<button class="act" onclick="openPay('${o.no}')">去支付</button>`);
+    ops.push(`<button class="act warn" onclick="cancelOrder('${o.no}')">取消订单</button>`);
+  }
+  if (o.status === '待发货') ops.push(`<button class="act warn" onclick="applyRefund('${o.no}')">申请整单退款</button>`);
+  if (o.status === '退款审核中') ops.push(`<span class="muted">退款审核中（已暂停发货）</span>`);
+  if (o.status === '已发货') ops.push(`<span class="muted">${o.carrier} ${o.tracking}</span>`);
+  if (o.status === '已退款') ops.push(`<span class="muted">退款已到账（渠道确认）</span>`);
+  if (o.status === '已关闭') ops.push(`<button class="act danger" onclick="lateNotify('${o.no}')">模拟渠道迟到通知</button>`);
+  return ops.join(' ');
+}
+function createOrder(pid) {
+  const p = S.products.find(x => x.id === pid);
+  const qty = +document.getElementById('qty-' + pid).value;
+  if (p.stock < qty) { toast('库存不足，下单失败（条件更新拦截，不超卖）'); return; }
+  const no = 'O20261112' + String(S.seq++).padStart(6, '0');
+  flow(pid, no, '下单占用', -qty);
+  S.orders.unshift({ no, buyer: 'buyer01', pid, pname: p.name, price: p.price, qty, amount: p.price * qty, status: '待付款', left: 30 });
+  ev(no, `下单占用 ${qty} 件，可售 → ${p.stock}`);
+  S.buyerTab = 'orders'; toast('下单成功，库存已占用，请在 30s 内支付'); renderAll();
+}
+function cancelOrder(no) {
+  const o = S.orders.find(x => x.no === no);
+  if (o.status !== '待付款') { toast('重复关闭：不重复释放库存（幂等）'); return; }
+  o.status = '已关闭'; o.closeReason = '买家主动取消';
+  flow(o.pid, no, '取消释放', o.qty);
+  ev(no, `买家取消 → 关闭并释放 ${o.qty} 件（仅一次）`);
+  toast('订单已关闭，占用库存已释放'); renderAll();
+}
+function openPay(no) {
+  const o = S.orders.find(x => x.no === no);
+  document.getElementById('modalBox').innerHTML = `
+    <h3>模拟支付渠道（独立服务）</h3>
+    <p>订单 ${o.no} ｜ 金额 <b>${fmt(o.amount)}</b></p>
+    <p class="muted">按钮只操作渠道；渠道异步发通知，交易系统验签后才变更订单状态。</p>
+    <button class="act" onclick="payResult('${no}','ok')">模拟支付成功</button>
+    <button class="act warn" onclick="payResult('${no}','fail')">模拟支付失败</button>
+    <button class="act warn" onclick="payResult('${no}','dup')">补发重复通知</button>
+    <button class="act danger" onclick="document.getElementById('modal').style.display='none'">关闭</button>`;
+  document.getElementById('modal').style.display = 'flex';
+}
+function payResult(no, r) {
+  const o = S.orders.find(x => x.no === no);
+  if (r === 'ok') {
+    o.status = '待发货'; o.paid = o.amount; S.paidSum += o.amount;
+    log('成功', no, 'T' + Date.now(), `验签通过，记收款 ${o.amount} 分`);
+    ev(no, `支付通知验签通过 → 记收款 ${o.amount} 分 → 待发货`);
+    toast('渠道通知验签通过：已收款，订单转待发货');
+  } else if (r === 'fail') {
+    log('失败', no, 'T' + Date.now(), '渠道返回支付失败，订单仍待付款');
+    toast('支付失败：订单保持待付款，可重试或取消');
+  } else {
+    log('重复', no, 'T111001', '重复通知：幂等拦截，不重复记款');
+    toast('重复通知已幂等拦截：不重复记款（见运营-通知日志）');
+  }
+  document.getElementById('modal').style.display = 'none'; renderAll();
+}
+function lateNotify(no) {
+  const o = S.orders.find(x => x.no === no);
+  log('迟到', no, 'T' + Date.now(), '订单已关闭，不恢复订单、不占用库存 → 异常支付待处理');
+  S.exceptions.unshift({ id: 'EX' + Date.now(), orderNo: no, tradeNo: 'T' + Date.now(), amount: o.amount, status: '待处理', note: '订单关闭后收到成功支付通知（迟到支付）' });
+  ev(no, '迟到成功通知 → 异常支付待处理（订单仍关闭，库存不变）');
+  toast('迟到通知已转入异常支付待处理（客服可见）'); renderAll();
+}
+function applyRefund(no) {
+  const o = S.orders.find(x => x.no === no);
+  if (o.status !== '待发货') { toast('仅待发货订单可申请售前退款'); return; }
+  o.status = '退款审核中';
+  S.refunds.unshift({ no: 'R20261112' + String(S.seq++).padStart(6, '0'), orderNo: no, amount: o.amount, type: '售前退款', status: '审核中', reason: '买家申请整单退款', csNote: '' });
+  ev(no, '买家申请整单退款 → 审核中（暂停发货）');
+  toast('退款申请已提交，该订单已暂停发货'); renderAll();
+}
+
+// ============ 仓库页 ============
+function renderWH() {
+  const rows = S.orders.filter(o => ['待发货','退款审核中','已发货'].includes(o.status)).map(o => `
+    <tr><td>${o.no}</td><td>${o.pname} × ${o.qty}</td><td>${tag(o.status)}</td>
+    <td>${o.status==='已发货' ? `${o.carrier} ${o.tracking}` : (o.status==='待发货'
+      ? `<input id="c-${o.no}" placeholder="承运方" size="6"> <input id="t-${o.no}" placeholder="运单号" size="10">
+         <button class="act" onclick="ship('${o.no}')">发货</button>`
+      : `<button class="act" disabled title="退款审核中，暂停发货">发货</button><span class="muted">退款审核中，暂停发货</span>`)}</td></tr>`).join('');
+  document.getElementById('whPage').innerHTML =
+    `<table><tr><th>订单号</th><th>商品</th><th>状态</th><th>发货登记（承运方 + 运单号）</th></tr>${rows}</table>
+     <p class="muted">仅"待发货"订单可发货，每单仅一次；已发货订单不再受理售前退款。</p>`;
+}
+function ship(no) {
+  const o = S.orders.find(x => x.no === no);
+  const c = document.getElementById('c-' + no).value.trim(), t = document.getElementById('t-' + no).value.trim();
+  if (!c || !t) { toast('承运方与运单号必填'); return; }
+  o.status = '已发货'; o.carrier = c; o.tracking = t;
+  ev(no, `仓库发货：${c} ${t}`);
+  toast('发货成功（本单不可再发）'); renderAll();
+}
+
+// ============ 客服页 ============
+function renderCS() {
+  const tabs = [ ['refund','退款审核'], ['retry','退款失败待处理'], ['ex','异常支付'] ];
+  document.getElementById('csTabs').innerHTML = tabs.map(([k,n]) =>
+    `<button class="${S.csTab===k?'active':''}" onclick="S.csTab='${k}';renderAll()">${n}</button>`).join('');
+  const el = document.getElementById('csPage');
+  if (S.csTab === 'refund') {
+    const rows = S.refunds.filter(r => r.status === '审核中').map(r => `
+      <tr><td>${r.no}</td><td>${r.orderNo}</td><td>${fmt(r.amount)}</td><td>${r.reason}</td>
+      <td><input id="note-${r.no}" placeholder="处理原因（必填）" size="14">
+      <button class="act" onclick="review('${r.no}',true)">同意</button>
+      <button class="act danger" onclick="review('${r.no}',false)">拒绝</button></td></tr>`).join('');
+    el.innerHTML = `<table><tr><th>退款单号</th><th>订单号</th><th>金额</th><th>申请原因</th><th>审核</th></tr>${rows || '<tr><td colspan="5" class="muted">暂无待审核</td></tr>'}</table>`;
+  } else if (S.csTab === 'retry') {
+    const rows = S.refunds.filter(r => r.status === '退款失败待处理' || r.status === '退款中' || r.status === '已退款' || r.status === '已拒绝').map(r => `
+      <tr><td>${r.no}</td><td>${r.orderNo}</td><td>${fmt(r.amount)}</td><td>${tag(r.status)}</td><td>${r.csNote || ''}</td>
+      <td>${r.status==='退款失败待处理' ? `<button class="act warn" onclick="retryRefund('${r.no}')">重试退款</button>` : ''}</td></tr>`).join('');
+    el.innerHTML = `<table><tr><th>退款单号</th><th>订单号</th><th>金额</th><th>状态</th><th>客服备注</th><th>操作</th></tr>${rows || '<tr><td colspan="6" class="muted">暂无记录</td></tr>'}</table>`;
+  } else {
+    const rows = S.exceptions.map(x => `
+      <tr><td>${x.id}</td><td>${x.orderNo}</td><td>${x.tradeNo}</td><td>${fmt(x.amount)}</td><td>${x.note}</td><td>${tag(x.status)}</td>
+      <td>${x.status==='待处理' ? `<button class="act warn" onclick="exRefund('${x.id}')">核实并发起退款</button>` : '<span class="muted">已退款（不回补库存）</span>'}</td></tr>`).join('');
+    el.innerHTML = `<table><tr><th>编号</th><th>订单号</th><th>渠道交易号</th><th>金额</th><th>说明</th><th>状态</th><th>操作</th></tr>${rows}</table>
+      <p class="muted">异常记录独立于订单状态保存，不可通过修改订单状态消除；迟到支付的退款不回补库存。</p>`;
+  }
+}
+function review(rno, pass) {
+  const r = S.refunds.find(x => x.no === rno);
+  const note = document.getElementById('note-' + rno).value.trim();
+  if (!note) { toast('请填写处理原因'); return; }
+  r.csNote = note;
+  const o = S.orders.find(x => x.no === r.orderNo);
+  if (pass) {
+    r.status = '退款中'; ev(r.orderNo, `客服同意退款（${note}）→ 请求渠道退款`);
+    toast('已请求渠道退款……（演示：渠道首次返回失败）');
+    setTimeout(() => { r.status = '退款失败待处理'; ev(r.orderNo, '渠道明确失败 → 退款失败待处理，可重试'); renderAll(); }, 600);
+  } else {
+    r.status = '已拒绝'; o.status = '待发货';
+    ev(r.orderNo, `客服拒绝退款（${note}）→ 订单回待发货，可继续发货`);
+    toast('已拒绝：订单恢复可发货'); renderAll();
+  }
+}
+function retryRefund(rno) {
+  const r = S.refunds.find(x => x.no === rno);
+  r.status = '已退款';
+  const o = S.orders.find(x => x.no === r.orderNo);
+  o.status = '已退款'; S.refundedSum += r.amount;
+  flow(o.pid, o.no, '退款回补', o.qty);
+  ev(o.no, `重试成功 → 已退款，回补库存 ${o.qty} 件（仅一次）`);
+  toast('退款成功：库存已回补，买家可见退款结果'); renderAll();
+}
+function exRefund(id) {
+  const x = S.exceptions.find(e => e.id === id);
+  x.status = '已退款'; S.refundedSum += x.amount;
+  ev(x.orderNo, `客服核实迟到支付 → 退款 ${x.amount} 分（不回补库存）`);
+  toast('已退款：按规则不回补库存（数量未变化）'); renderAll();
+}
+
+// ============ 运营页 ============
+function renderOps() {
+  const tabs = [ ['goods','商品管理'], ['sum','交易汇总'], ['log','通知与异常日志'], ['flow','库存流水'] ];
+  document.getElementById('opsTabs').innerHTML = tabs.map(([k,n]) =>
+    `<button class="${S.opsTab===k?'active':''}" onclick="S.opsTab='${k}';renderAll()">${n}</button>`).join('');
+  const el = document.getElementById('opsPage');
+  if (S.opsTab === 'goods') {
+    el.innerHTML = S.products.map(p => `
+      <div class="card"><b>${p.name}</b> ${p.onSale?tag('在售'):tag('已下架')}
+      ｜ 当前单价 <b>${fmt(p.price)}</b> ｜ 可售 <b>${p.stock}</b>
+      <button class="act" onclick="toggleSale('${p.id}')">${p.onSale?'下架':'上架'}</button>
+      <button class="act warn" onclick="reprice('${p.id}')">改价</button>
+      <div class="muted">改价 / 下架仅影响新订单，已创建订单按快照结算。</div></div>`).join('');
+  } else if (S.opsTab === 'sum') {
+    const trace = S.events.map(e => `<tr><td>${e.orderNo}</td><td>${e.text}</td></tr>`).join('');
+    el.innerHTML = `
+      <div class="stat">已收款合计<br><b>${fmt(S.paidSum)}</b></div>
+      <div class="stat">已退款合计<br><b>${fmt(S.refundedSum)}</b></div>
+      <div class="stat">商品A 可售<br><b>${S.products[0].stock}</b></div>
+      <h3>按订单穿透查询（收款 / 退款 / 发货 / 异常）</h3>
+      <table><tr><th>订单号</th><th>事件轨迹</th></tr>${trace}</table>`;
+  } else if (S.opsTab === 'log') {
+    const rows = S.notifyLogs.map(l => `<tr><td>${l.id}</td><td>${l.orderNo}</td><td>${l.tradeNo}</td><td>${tag(l.result)}</td><td>${l.detail}</td></tr>`).join('');
+    el.innerHTML = `<table><tr><th>编号</th><th>订单号</th><th>渠道交易号</th><th>处理结果</th><th>说明</th></tr>${rows}</table>
+      <p class="muted">全部通知留痕：成功、重复、金额不符、未知订单、验签失败、迟到，均可查询。</p>`;
+  } else {
+    const rows = S.flows.map(f => `<tr><td>${f.pid}</td><td>${f.orderNo}</td><td>${f.type}</td><td>${f.qty>0?'+':''}${f.qty}</td><td>${f.after}</td></tr>`).join('');
+    el.innerHTML = `<table><tr><th>商品</th><th>关联订单</th><th>变动类型</th><th>数量</th><th>变动后可售</th></tr>${rows}</table>
+      <p class="muted">占用 / 释放 / 回补全部留痕，流水合计与可售数量对平；重复关闭 / 重复退款不产生第二条流水。</p>`;
+  }
+}
+function toggleSale(pid) { const p = S.products.find(x => x.id === pid); p.onSale = !p.onSale; toast(p.onSale ? '已上架' : '已下架（不影响已有订单）'); renderAll(); }
+function reprice(pid) {
+  const p = S.products.find(x => x.id === pid);
+  const v = prompt('新单价（分）', p.price); if (!v || isNaN(+v)) return;
+  p.price = +v; toast('已改价：仅影响新订单，历史订单按快照'); renderAll();
+}
+
+// ============ 渲染入口 ============
+function renderAll() {
+  renderRoleBar();
+  ['buyer','wh','cs','ops'].forEach(k => document.getElementById('sec-' + k).className = S.role === k ? 'show' : '');
+  renderBuyer(); renderWH(); renderCS(); renderOps();
+}
+renderAll();
+</script>
+</body>
+</html>
