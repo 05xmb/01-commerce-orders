@@ -1,7 +1,7 @@
 #!/bin/sh
 # 容器入口：按 ROLE 选择运行角色
 #   server  → 交易系统 API（:8888）
-#   channel → 模拟支付渠道（:8901）
+#   channel → 模拟支付渠道（:8902）
 #   web     → nginx 托管 SPA 并反代 /api、/channel（:80）
 set -e
 

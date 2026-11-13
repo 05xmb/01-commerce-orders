@@ -21,7 +21,7 @@ func TestLoadEnvExpand(t *testing.T) {
 	t.Setenv("REDIS_ADDR", "127.0.0.1:6379")
 	t.Setenv("REDIS_PASS", "")
 	t.Setenv("CHANNEL_SECRET", "s3")
-	t.Setenv("CHANNEL_BASE_URL", "http://127.0.0.1:8901")
+	t.Setenv("CHANNEL_BASE_URL", "http://127.0.0.1:8902")
 	p := writeTemp(t, `Name: trade-api
 Host: 0.0.0.0
 Port: 8888
@@ -82,7 +82,7 @@ func TestLoadChannel(t *testing.T) {
 	t.Setenv("TRADE_NOTIFY_URL", "http://127.0.0.1:8888")
 	p := writeTemp(t, `Name: pay-channel
 Host: 0.0.0.0
-Port: 8901
+Port: 8902
 ChannelSecret: ${CHANNEL_SECRET}
 TradeNotifyURL: ${TRADE_NOTIFY_URL}
 PayNotifyDelayMs: 50

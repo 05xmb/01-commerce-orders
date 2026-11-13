@@ -27,5 +27,5 @@ COPY deploy/nginx.conf /app/etc/nginx.conf
 COPY deploy/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 ENV ROLE=server
-EXPOSE 8888 8901 80
+EXPOSE 8888 8902 80
 ENTRYPOINT ["/app/entrypoint.sh"]
