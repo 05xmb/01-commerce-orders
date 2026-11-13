@@ -4,7 +4,9 @@ on:
   pull_request:
     branches: [main]
   push:
+    branches: [dev/01]
     tags: ['v*']
+  workflow_dispatch:
 
 env:
   COVERAGE_MIN: 85
