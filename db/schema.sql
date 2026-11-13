@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS stock_flow (
   product_id  VARCHAR(32) NOT NULL,
   order_no    VARCHAR(32) NOT NULL,
   change_type VARCHAR(16) NOT NULL COMMENT 'occupy/release/restore',
-  qty         INT         NOT NULL COMMENT '变动数量（负为占用）',
+  qty         INT         NOT NULL COMMENT '变动数量（符号约定：占用为负、释放/回补为正；对账守恒按 SUM(qty) 聚合，勿按 change_type 取正数聚合）',
   stock_after INT         NOT NULL,
   created_at  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_product (product_id),

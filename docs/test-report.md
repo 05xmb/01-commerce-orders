@@ -53,20 +53,25 @@
 
 ## 3. 覆盖率门禁（`go test ./... -count=1 -coverprofile`）
 
-| 包 | 覆盖率 | 门禁 |
-|---|---|---|
-| internal/service（业务核心） | 85.9% | ≥85% ✅ |
-| internal/handler | 92.7% | ≥85% ✅ |
-| internal/repo/mysql | 97.7% | ≥85% ✅ |
-| internal/repo/fake | 98.2% | ≥85% ✅ |
-| internal/channelclient | 90.0% | ≥85% ✅ |
-| internal/config | 95.8% | ≥85% ✅ |
-| internal/pkg/idgen / sign | 90.9% / 100% | ✅ |
-| internal/tokstore | 100% | ✅ |
-| cmd/server（main 装配） | 25.4% | 豁免（AGENTS.md 约定仅 main 入口不计核心包） |
-| **整体** | **89.7%** | **≥85% ✅** |
+> **口径声明（2026-11-13 整改 N-1）**：覆盖率一律按**语句口径**（已覆盖语句数 ÷ 总语句数，即 coverprofile 的 numStmt 加权）核算；此前 CI 分包门禁使用"逐函数百分比求平均"，会掩盖大函数未覆盖，已改为语句口径（`.github/workflows/ci.yml` 门禁脚本同步修订）。
+> 2026-11-13 复测（N-1 整改后，同命令、同口径）：
 
-静态检查：`gofmt -l .` 无输出；`go vet ./...` 无告警；`go test ./... -count=1` 全部 ok。
+| 包 | 覆盖率（语句口径） | 门禁 |
+|---|---|---|
+| internal/service（业务核心） | 99.7%（376/377，整改前 84.9%） | ≥85% ✅ |
+| internal/handler | 92.7%（228/246） | ≥85% ✅ |
+| internal/repo/mysql | 97.7%（260/266） | ≥85% ✅ |
+| internal/repo/fake | 98.8%（488/494） | ≥85% ✅ |
+| internal/channelclient | 90.0%（18/20） | ≥85% ✅ |
+| internal/config | 95.8%（23/24） | ≥85% ✅ |
+| internal/pkg/idgen / sign / tokstore 等 | 97.6%（40/41，归入 other） | ✅ |
+| cmd/channel（模拟渠道 main） | 81.6%（84/103） | 豁免（仅 main 入口装配） |
+| cmd/server（main 装配） | 23.9%（16/67） | 豁免（AGENTS.md 约定仅 main 入口不计核心包） |
+| **整体** | **93.6%（1533/1638）** | **≥85% ✅** |
+
+整改补充（2026-11-13，N-1a）：新增 42 个单测（`covergap*_test.go` 4 个文件）覆盖 service 全部 57 条未达语句（并发竞态窗口 + 数据库错误分支），无删除/弱化既有断言；竞态夹具 `raceStore` 在事务前置改写已提交状态模拟并发获胜方（fake 事务快照制，详见文件头注释）。
+
+静态检查（2026-11-13 复测）：`gofmt -l .` 无输出（N-2 整改：`.gitattributes` 固定 `*.go text eol=lf`，46 个文件行尾归一 LF 后达标）；`go vet ./...` 无告警；`go test ./... -count=1` 全部 ok。
 
 ## 4. 端到端复测（修复后二进制 + 真实 MySQL/Redis）
 

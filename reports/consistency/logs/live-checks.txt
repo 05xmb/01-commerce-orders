@@ -1,0 +1,79 @@
+﻿exit=0
+== Batch1 A3/C4/B5：渠道异常注入（amount_mismatch/bad_sign/unknown_order/duplicate）==
+  X1=O20261113000012 金额 5000
+  [PASS] 金额不符通知不改变订单状态
+  [PASS] 验签失败通知不改变订单状态
+  [PASS] 重复通知仅记一次款后订单 to_ship
+  [PASS] 订单穿透：payment 存在（唯一性由 SQL 复核）
+  [PASS] 通知日志含 amount_mismatch
+  [PASS] 通知日志含 bad_sign
+  [PASS] 通知日志含 duplicate
+  [PASS] 未知订单通知有可查询拒绝记录
+== Batch2 A5/A7：拒绝退款后可发货 / 已发货不受理退款 / 重复发货 / 重复关闭 ==
+  [PASS] X2 支付成功 to_ship
+  [PASS] 申请退款后进入 refund_review（暂停发货）
+  [PASS] 客服拒绝审核成功
+  [PASS] 拒绝后订单回到 to_ship
+  [PASS] 拒绝后仓库可继续发货
+  [PASS] 已发货订单不再受理售前退款
+  [PASS] 重复发货被拒绝
+  [PASS] 主动取消成功
+  [PASS] 重复关闭被拒绝（不重复释放）
+  [PASS] 取消单流水恰好 占用1+释放1
+== Batch3 D/C9：越权与身份可信 ==
+  [PASS] 买家访问他人订单被拒绝
+  [PASS] 买家调仓库发货接口被拒绝
+  [PASS] 买家调客服审核接口被拒绝
+  [PASS] 买家调运营汇总被拒绝
+  [PASS] 未登录访问被拒绝
+  [PASS] 请求体伪造用户编号无效（订单归属 token 身份 buyer01）
+  [PASS] 伪造归属订单由本人可取消（清理）
+== Batch4 A1：改价不影响旧订单 / 下架不可购 / 超量不可购 ==
+  [PASS] 改价前下单金额=5000
+  [PASS] 改价后旧订单金额不变
+  [PASS] 更早订单金额亦不变
+  [PASS] 改价后新订单按新价 6000
+  [PASS] 超量下单被拒绝
+  [PASS] 下架后下单被拒绝
+  已恢复 P2 价格 5000 / 在售，并清理临时单
+== Batch5 B5/C6：重复退款通知不重复退款 ==
+  [PASS] 重复退款通知后退款单仍唯一 success
+  [PASS] 重复退款通知未再次回补库存
+== C8 汇总对账（API vs 明细随后 SQL 复核）==
+  运营汇总：实收  实退 （字段名以实际返回为准）
+{"paid_amount":120000,"refunded_amount":100000,"products":[{"id":"P1","name":"商品A（活动款）","price":10000,"stock":5,"on_sale":true},{"id":"P2","name":"商品B（陪衬）","price":5000,"stock":8,"on_sale":true}]}
+
+==== 活体测试结果汇总 ====
+PASS 金额不符通知不改变订单状态
+PASS 验签失败通知不改变订单状态
+PASS 重复通知仅记一次款后订单 to_ship
+PASS 订单穿透：payment 存在（唯一性由 SQL 复核）
+PASS 通知日志含 amount_mismatch
+PASS 通知日志含 bad_sign
+PASS 通知日志含 duplicate
+PASS 未知订单通知有可查询拒绝记录
+PASS X2 支付成功 to_ship
+PASS 申请退款后进入 refund_review（暂停发货）
+PASS 客服拒绝审核成功
+PASS 拒绝后订单回到 to_ship
+PASS 拒绝后仓库可继续发货
+PASS 已发货订单不再受理售前退款
+PASS 重复发货被拒绝
+PASS 主动取消成功
+PASS 重复关闭被拒绝（不重复释放）
+PASS 取消单流水恰好 占用1+释放1
+PASS 买家访问他人订单被拒绝
+PASS 买家调仓库发货接口被拒绝
+PASS 买家调客服审核接口被拒绝
+PASS 买家调运营汇总被拒绝
+PASS 未登录访问被拒绝
+PASS 请求体伪造用户编号无效（订单归属 token 身份 buyer01）
+PASS 伪造归属订单由本人可取消（清理）
+PASS 改价前下单金额=5000
+PASS 改价后旧订单金额不变
+PASS 更早订单金额亦不变
+PASS 改价后新订单按新价 6000
+PASS 超量下单被拒绝
+PASS 下架后下单被拒绝
+PASS 重复退款通知后退款单仍唯一 success
+PASS 重复退款通知未再次回补库存

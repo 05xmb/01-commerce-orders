@@ -1,0 +1,66 @@
+﻿=== 验收会话实测 2026-11-13（非开发自述）===
+
+--- gofmt -l . ---
+cmd\channel\main.go
+cmd\channel\main_test.go
+cmd\server\main.go
+cmd\server\main_test.go
+internal\channelclient\client.go
+internal\channelclient\client_test.go
+internal\config\config.go
+internal\config\config_test.go
+internal\handler\errorbranch_test.go
+internal\handler\errstore_test.go
+internal\handler\handler.go
+internal\handler\handler_test.go
+internal\pkg\idgen\idgen.go
+internal\pkg\idgen\idgen_test.go
+internal\pkg\sign\sign.go
+internal\pkg\sign\sign_test.go
+internal\repo\fake\fake.go
+internal\repo\fake\fake_test.go
+internal\repo\fake\locked.go
+internal\repo\mysql\mysql.go
+internal\repo\mysql\mysql_test.go
+internal\repo\repo.go
+internal\service\auth.go
+internal\service\coverage_extra_test.go
+internal\service\faildb_test.go
+internal\service\failwrap_test.go
+internal\service\helper_test.go
+internal\service\misc_test.go
+internal\service\notify.go
+internal\service\notify_test.go
+internal\service\ops.go
+internal\service\order.go
+internal\service\order_test.go
+internal\service\product.go
+internal\service\refund.go
+internal\service\refund_test.go
+internal\service\regression_test.go
+internal\service\service.go
+internal\service\shipment.go
+internal\tokstore\tokstore.go
+internal\tokstore\tokstore_test.go
+internal\types\types.go
+
+gofmt 列出文件数: 42
+
+--- go vet ./... exit=0 ---
+
+=== 整改后复测（2026-11-13 同日，R-2 闭环：.gitattributes 增补 *.go eol=lf，46 个 .go 文件行尾归一 LF）===
+
+--- gofmt -l . ---
+（无输出）
+
+gofmt exit=0
+
+--- go vet ./... ---
+exit=0
+
+--- go test ./... -count=1 ---
+全部 ok（12 个包通过，service 含新增 42 个补测）
+
+--- go test ./... -coverprofile（语句口径）---
+整体 93.6%（1533/1638）；internal/service 99.7%（376/377，整改前 84.9%）
+

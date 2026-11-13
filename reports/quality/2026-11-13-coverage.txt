@@ -1,0 +1,19 @@
+﻿=== 验收会话覆盖率实测 2026-11-13（验收 Agent 重跑，非开发自述）===
+
+--- go test ./... -count=1 -coverprofile（语句口径）---
+ok  	trade/internal/service	0.188s	coverage: 84.9% of statements
+ok  	trade/internal/handler	0.168s	coverage: 92.7% of statements
+ok  	trade/internal/repo/mysql	0.083s	coverage: 97.7% of statements
+ok  	trade/internal/repo/fake	0.083s	coverage: 98.8% of statements
+ok  	trade/internal/config	0.189s	coverage: 95.8% of statements
+ok  	trade/internal/channelclient	0.125s	coverage: 90.0% of statements
+ok  	trade/internal/tokstore	0.145s	coverage: 100.0% of statements
+ok  	trade/cmd/channel	0.484s	coverage: 81.6% of statements
+
+--- go tool cover -func 总计 ---
+total:						(statements)		90.2%
+
+--- 结论 ---
+internal/service 语句口径 84.9% < 85%（AGENTS 第6节门禁）；docs/test-report.md 声称 85.9%/整体89.7% 不可复现（实测整体 90.2%）。
+ci.yml 分包门禁用 go tool cover -func 逐函数平均法（service 约92.97%），与 AGENTS 语句口径不一致，会掩盖 service 未达标。
+go test -race 本机不可用（-race requires cgo，无 gcc），race 仅在 CI ubuntu 执行（e90cf90 提交为 CI -race 检出 fake.Store 竞态的修复）。

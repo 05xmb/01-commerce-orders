@@ -4,6 +4,8 @@
 
 | 日期 | 阶段（角色） | Skill | 用途 | 产出位置 |
 | --- | --- | --- | --- | --- |
+| 2026-11-13 | 验收复审（全量审核） | `order-trade-consistency-check` | 本地开发环境复跑 S1~S4 + 33 项活体测试 + SQL 取证（C1~C10/F0~F7），一致性全过（3 项口径观察） | `reports/consistency/2026-11-13-consistency.md`、`reports/consistency/logs/` |
+| 2026-11-13 | 验收复审（全量审核） | `acceptance-check-01` | 对照原始题面逐项复验收 A1~A8/B1~B5/C1~C7/D + 门禁重跑取证；发现 N-1~N-4（service 覆盖率 84.9%<85% 发布阻断等），T17 P1/P2 确认闭环 | `reports/acceptance/acceptance-report-2026-11-13.md`、`reports/quality/2026-11-13-*` |
 | 2026-11-12 | 验收（T17） | `acceptance-check-01` | 对照原始题面逐项验收 A1~A8 / B1~B5 / C1~C7 / D，输出验收报告 | `reports/acceptance/acceptance-report.md` |
 
 说明：
