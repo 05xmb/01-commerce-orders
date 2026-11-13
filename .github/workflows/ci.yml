@@ -33,16 +33,23 @@ jobs:
       - name: 单元测试（-race 竞争检测）
         run: go test ./... -race -count=1 -coverprofile=coverage.out
 
-      - name: 覆盖率门禁（整体 ≥85%，核心包 ≥85%）
+      - name: 覆盖率门禁（语句口径：整体 ≥85%，核心包 ≥85%）
         run: |
+          # 口径：按语句数（numStmt）加权，即"已覆盖语句/总语句"；
+          # 不得用逐函数百分比求平均（会掩盖大函数未覆盖，见验收 N-1）。
           total=$(go tool cover -func coverage.out | awk '/^total:/ {gsub("%","",$3); print int($3)}')
           echo "整体语句覆盖率: ${total}%"
           if [ "$total" -lt "$COVERAGE_MIN" ]; then
             echo "覆盖率 ${total}% 低于门禁 ${COVERAGE_MIN}%"; exit 1
           fi
           for pkg in internal/service internal/handler internal/repo/mysql; do
-            cov=$(go tool cover -func coverage.out | grep "trade/${pkg}/" | awk '{gsub("%","",$3); s+=$3; n+=1} END {if (n>0) printf "%.0f", s/n; else print 0}')
-            echo "${pkg}: ${cov}%"
+            cov=$(awk -v pat="/${pkg}/" '
+              NR>1 {
+                pos=$1; sub(/:[0-9.]+,[0-9.]+$/, "", pos);
+                if (index(pos, pat) > 0) { tot += $2; if ($3+0 > 0) cov += $2 }
+              }
+              END { if (tot > 0) printf "%.0f", 100*cov/tot; else print 0 }' coverage.out)
+            echo "${pkg}: ${cov}% (语句口径)"
             if [ "$cov" -lt "$COVERAGE_MIN" ]; then
               echo "核心包 ${pkg} 覆盖率 ${cov}% 低于门禁"; exit 1
             fi

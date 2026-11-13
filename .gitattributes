@@ -1,3 +1,5 @@
 # 换行符规范：shell 脚本必须 LF（CRLF 会导致容器内 shebang 解释器找不到）
 *.sh text eol=lf
 *.ps1 text eol=crlf
+# Go 源码统一 LF：CRLF 会使 gofmt -l 列出全部文件（验收 N-2），破坏"gofmt 无输出"门禁
+*.go text eol=lf
